@@ -3,7 +3,7 @@
 This repository contains PyTorch implementations of various random feature maps for polynomial and general dot product kernels. In particular, we provide implementations for complex-valued features that improve the kernel approximation significantly.
 Furthermore, it allows to reproduce the Gaussian Process experiments from the associated paper: ...
 
-The basic building block of random features for dot product kernels are polynomial sketches that approximate the polynomial kernel of degree $p$. Such random projections can be seen as an extension of the Johnson-Lindenstrauss Lemma to degree-$p$ tensored versions of the input feature space and are therefore quite general. If $p=1$, these sketches reduce to linear random projections. Furthermore, they can be used to approximate the Gaussian kernel via a truncated Taylor series expansion.
+The basic building block of random features for dot product kernels are polynomial sketches that approximate the polynomial kernel of degree *p*. Such random projections can be seen as an extension of the Johnson-Lindenstrauss Lemma to degree-*p* tensored versions of the input feature space and are therefore quite general. If *p=1*, these sketches reduce to linear random projections. Furthermore, they can be used to approximate the Gaussian kernel via a truncated Taylor series expansion.
 
 ## Requirements
 
