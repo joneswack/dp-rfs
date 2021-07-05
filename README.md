@@ -41,10 +41,10 @@ feature_encoder.move_submodules_to_cuda() # only for GPU
 feature_encoder.forward(input_data) # project input data
 ```
 
-`projection_type` has a strong impact on the approximation quality and computation speed. `projection_type=srht` uses the subsampled randomized Hadamard transform that makes use of structured matrix products. These are faster (especially on the GPU). They also give lower variances for odd degrees than Rademacher and Gaussian sketches.
+`projection_type` has a strong impact on the approximation quality and computation speed. `projection_type='srht'` uses the subsampled randomized Hadamard transform that makes use of structured matrix products. These are faster (especially on the GPU). They also give lower variances for odd degrees than Rademacher and Gaussian sketches.
 
-Depending on the scaling of your data, high-degree sketches can give very large variances. `complex_weights` usually improve the approximation significantly in this case. `hierarchical` sketches <https://arxiv.org/abs/1909.01410> can be helpful too.
-Both come at a higher computational cost for the downstream task.
+Depending on the scaling of your data, high-degree sketches can give very large variances. `complex_weights` usually improve the approximation significantly in this case. `hierarchical` sketches (<https://arxiv.org/abs/1909.01410>) can be helpful too.
+Complex random features can be computed about as fast as real ones, but the cost of the downstream task is usually higher. Hierarchical sketches are more expensive to construct but have the same downstream cost.
 
 At the bottom of `random_features/polynomial_sketch.py`, we show how to evaluate the unbiasedness of the approximation. You can directly run the script.
 
