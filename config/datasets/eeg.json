@@ -1,0 +1,5 @@
+{
+    "name": "EEG",
+    "train_data": "../datasets/export/eeg/pytorch/eeg.pth",
+    "regression": false
+}

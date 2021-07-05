@@ -1,0 +1,8 @@
+{
+    "name": "Adult",
+    "train_data": "../datasets/export/adult/pytorch/train_adult.pth",
+    "test_data": "../datasets/export/adult/pytorch/test_adult.pth",
+    "normalize": true,
+    "standardize": true,
+    "regression": false
+}

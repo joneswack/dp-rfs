@@ -1,0 +1,5 @@
+{
+    "name": "Naval",
+    "train_data": "../datasets/export/naval/pytorch/naval.pth",
+    "regression": true
+}

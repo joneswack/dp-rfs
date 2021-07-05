@@ -1,0 +1,5 @@
+{
+    "name": "Miniboo",
+    "train_data": "../datasets/export/miniboo/pytorch/miniboo.pth",
+    "regression": false
+}

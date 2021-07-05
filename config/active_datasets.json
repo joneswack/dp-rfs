@@ -1,0 +1,22 @@
+{
+    "regression": [
+        "config/datasets/boston.json",
+        "config/datasets/concrete.json",
+        "config/datasets/energy.json",
+        "config/datasets/kin8nm.json",
+        "config/datasets/naval.json",
+        "config/datasets/powerplant.json",
+        "config/datasets/protein.json",
+        "config/datasets/yacht.json"
+    ],
+    "classification": [
+        "config/datasets/mnist.json",
+        "config/datasets/fashion_mnist.json",
+        "config/datasets/cod_rna.json",
+        "config/datasets/covertype.json",
+        "config/datasets/drive.json",
+        "config/datasets/magic.json",
+        "config/datasets/miniboo.json",
+        "config/datasets/mocap.json"
+    ]
+}

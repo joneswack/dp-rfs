@@ -1,0 +1,5 @@
+{
+    "name": "Drive",
+    "train_data": "../datasets/export/drive/pytorch/drive.pth",
+    "regression": false
+}

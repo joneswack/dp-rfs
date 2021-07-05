@@ -1,0 +1,5 @@
+{
+    "name": "Powerplant",
+    "train_data": "../datasets/export/powerplant/pytorch/powerplant.pth",
+    "regression": true
+}

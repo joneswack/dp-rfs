@@ -1,0 +1,5 @@
+{
+    "name": "Letter",
+    "train_data": "../datasets/export/letter/pytorch/letter.pth",
+    "regression": false
+}

@@ -1,0 +1,5 @@
+{
+    "name": "Yacht",
+    "train_data": "../datasets/export/yacht/pytorch/yacht.pth",
+    "regression": true
+}

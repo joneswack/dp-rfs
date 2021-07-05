@@ -1,0 +1,5 @@
+.vscode
+.ipynb_checkpoints
+logs
+**/__pycache__
+notebooks/complex-time.ipynb

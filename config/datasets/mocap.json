@@ -1,0 +1,5 @@
+{
+    "name": "Mocap",
+    "train_data": "../datasets/export/mocap/pytorch/mocap.pth",
+    "regression": false
+}

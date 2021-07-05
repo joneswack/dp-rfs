@@ -1,0 +1,5 @@
+{
+    "name": "Energy",
+    "train_data": "../datasets/export/energy/pytorch/energy.pth",
+    "regression": true
+}

@@ -1,0 +1,5 @@
+{
+    "name": "Protein",
+    "train_data": "../datasets/export/protein/pytorch/protein.pth",
+    "regression": true
+}

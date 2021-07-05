@@ -1,0 +1,5 @@
+{
+    "name": "kin8nm",
+    "train_data": "../datasets/export/kin8nm/pytorch/kin8nm.pth",
+    "regression": true
+}

@@ -1,0 +1,8 @@
+{
+    "name": "cifar10",
+    "train_data": "../datasets/export/cifar10/pytorch/train_cifar10.pth",
+    "test_data": "../datasets/export/cifar10/pytorch/test_cifar10.pth",
+    "normalize": true,
+    "standardize": false,
+    "regression": false
+}

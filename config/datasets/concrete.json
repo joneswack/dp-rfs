@@ -1,0 +1,5 @@
+{
+    "name": "Concrete",
+    "train_data": "../datasets/export/concrete/pytorch/concrete.pth",
+    "regression": true
+}

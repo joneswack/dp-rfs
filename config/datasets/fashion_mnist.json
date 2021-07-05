@@ -1,0 +1,8 @@
+{
+    "name": "FashionMNIST",
+    "train_data": "../datasets/export/fashion_mnist/pytorch/train_fashion_mnist.pth",
+    "test_data": "../datasets/export/fashion_mnist/pytorch/test_fashion_mnist.pth",
+    "normalize": true,
+    "standardize": false,
+    "regression": false
+}

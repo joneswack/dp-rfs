@@ -1,0 +1,8 @@
+{
+    "name": "Cod_rna",
+    "train_data": "../datasets/export/cod-rna/pytorch/train_cod-rna.pth",
+    "test_data": "../datasets/export/cod-rna/pytorch/test_cod-rna.pth",
+    "normalize": true,
+    "standardize": false,
+    "regression": false
+}

@@ -1,0 +1,8 @@
+{
+    "name": "Gisette",
+    "train_data": "../datasets/export/gisette/pytorch/train_gisette.pth",
+    "test_data": "../datasets/export/gisette/pytorch/test_gisette.pth",
+    "normalize": true,
+    "standardize": false,
+    "regression": false
+}

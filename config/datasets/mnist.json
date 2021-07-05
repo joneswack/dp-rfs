@@ -1,0 +1,8 @@
+{
+    "name": "MNIST",
+    "train_data": "../datasets/export/mnist/pytorch/train_mnist.pth",
+    "test_data": "../datasets/export/mnist/pytorch/test_mnist.pth",
+    "normalize": true,
+    "standardize": false,
+    "regression": false
+}

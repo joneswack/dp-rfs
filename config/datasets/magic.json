@@ -1,0 +1,5 @@
+{
+    "name": "Magic",
+    "train_data": "../datasets/export/magic/pytorch/magic.pth",
+    "regression": false
+}

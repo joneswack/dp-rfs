@@ -1,0 +1,5 @@
+{
+    "name": "Boston",
+    "train_data": "../datasets/export/boston/pytorch/boston.pth",
+    "regression": true
+}

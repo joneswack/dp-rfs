@@ -1,0 +1,7 @@
+{
+    "name": "Covertype",
+    "train_data": "../datasets/export/covtype/pytorch/covtype.pth",
+    "normalize": true,
+    "standardize": false,
+    "regression": false
+}
