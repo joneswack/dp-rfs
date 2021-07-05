@@ -5,6 +5,18 @@ Furthermore, it allows to reproduce the Gaussian Process experiments from the as
 
 The basic building block of random features for dot product kernels are polynomial sketches that approximate the polynomial kernel of degree *p*. Such random projections can be seen as an extension of the Johnson-Lindenstrauss Lemma to degree-*p* tensored versions of the input feature space and are therefore quite general. If *p=1*, these sketches reduce to linear random projections. Furthermore, they can be used to approximate the Gaussian kernel via a truncated Taylor series expansion.
 
+This repository implements and extends works from the following papers:
+
+* [Random Feature Maps for Dot Product Kernels](http://proceedings.mlr.press/v22/kar12/kar12.pdf)
+* [Fast and Scalable Polynomial Kernels via
+Explicit Feature Maps](https://chbrown.github.io/kdd-2013-usb/kdd/p239.pdf)
+* [Spherical Random Features for polynomial kernels](https://papers.nips.cc/paper/2015/file/f7f580e11d00a75814d2ded41fe8e8fe-Paper.pdf)
+* [Oblivious Sketching of High-Degree Polynomial Kernels](https://arxiv.org/abs/1909.01410)
+* [Random Features for Large-Scale Kernel Machines](https://people.eecs.berkeley.edu/~brecht/papers/07.rah.rec.nips.pdf)
+* [Orthogonal Random Features](https://papers.nips.cc/paper/2016/file/53adaf494dc89ef7196d73636eb2451b-Paper.pdf)
+* [The Unreasonable Effectiveness of Structured
+Random Orthogonal Embeddings](https://arxiv.org/pdf/1703.00864.pdf)
+
 ## Requirements
 
 We recommend:
