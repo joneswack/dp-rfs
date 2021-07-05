@@ -98,3 +98,19 @@ python run_rf_gp_experiments.py --rf_parameter_file [rf_parameter_config] --data
 The output logs of the experiments are saved in the csv and logs folder.
 
 The bar plots can be created from the csv files using the Jupyter notebook `notebooks/bar-plot-visualization.ipynb`.
+
+## Cite our work
+
+If you find this repository helpful, feel free to cite our publication:
+
+```bibtex
+@inproceedings{wacker2021,
+    title = "Beyond Random Fourier Features: Improved Random Sketches for Dot Product Kernels",
+    author = "Wacker, Jonas and Kanagawa, Motonobu and Filippone, Maurizio",
+    booktitle = "",
+    month = "",
+    year = "2021",
+    publisher = "",
+    url = ""
+}
+```
