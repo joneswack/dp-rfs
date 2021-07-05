@@ -29,6 +29,7 @@ feature_encoder = PolynomialSketch(
     projection_dimension, # output dimension of the random sketch
     degree=degree, # degree of the polynomial kernel
     bias=bias, # bias parameter of the polynomial kernel
+    lengthscale=lengthscale, # inverse scale of the data (like lengthscale for Gaussian kernel)
     projection_type='gaussian'/'rademacher'/'srht'/'countsketch_scatter',
     hierarchical=False/True,
     complex_weights=False/True
