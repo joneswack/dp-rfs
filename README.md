@@ -23,11 +23,36 @@ We recommend:
 
 * Python 3.6 or higher
 * PyTorch 1.8 or higher
+* For GPU support: CUDA 10.2 or higher
 
 Multiple complex operations on tensors that we use in our code have been introduced in PyTorch version 1.8.
 In case you have a lower version, you cannot use the complex projections in our code.
 
+This code was tested on a Google Colab instance using Python version 3.7.1, PyTorch 1.9 (with CUDA 10.2) on an NVIDIA Tesla V100 graphics card with 16GB RAM. Depending on the size of the dataset and the projection dimension, much less RAM may be sufficient.
+
 ## Getting started
+
+### A note on using GPU-accelerated SRHT sketches
+
+PyTorch does not natively support the Fast Walsh Hadamard transform. This repository contains an implementation including CUDA kernel in `util/fwht`. This kernel is needed for GPU-accelerated TensorSRHT sketches.
+If you want to use this implementation, you also need to have CUDA **10.1** installed.
+
+Then you run the following command in your terminal prior to launching any other code:
+
+```sh
+export CUDA_HOME=<path to your cuda-10.1 installation> (usually /usr/local/cuda-10.1)
+```
+
+If you do not need GPU acceleration for TensorSRHT, comment out the following lines from `util/fwht/__init__.py`:
+
+```python
+if torch.cuda.is_available():
+    sources.extend([filedir + 'fwht_kernel.cu'])
+    flags.extend(['-DIS_CUDA_AVAILABLE'])
+    if os.environ.get('CUDA_HOME', '-1') == '-1':
+        warnings.warn('CUDA_HOME variable not set. Setting CUDA_HOME=/usr/local/cuda-10.1...',)
+        os.environ['CUDA_HOME'] = '/usr/local/cuda-10.1'
+```
 
 ### Polynomial sketches
 
@@ -100,7 +125,9 @@ Here, we chose the optimized Maclaurin method (`method='maclaurin'`).
 
 ## Reproducing the Gaussian Process Classification/Regression experiments
 
-If you would like to reproduce the results from the experiments in our paper, run the following command:
+If you would like to reproduce the results from the experiments in our paper, download the desired datasets from the [UCI machine learning repository](https://archive.ics.uci.edu/). The code_rna dataset is available at <https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/binary.html>. Then load the associated CSV files and save them using PyTorch. The dataset paths are in `config/datasets` and the datasets to be used in the experiments are in `config/active_datasets.json`.
+
+Then run the following command:
 
 ```sh
 python run_rf_gp_experiments.py --rf_parameter_file [rf_parameter_config] --datasets_file config/active_datasets.json --use_gpu

@@ -42,8 +42,8 @@ if torch.cuda.is_available():
     sources.extend([filedir + 'fwht_kernel.cu'])
     flags.extend(['-DIS_CUDA_AVAILABLE'])
     if os.environ.get('CUDA_HOME', '-1') == '-1':
-        warnings.warn('CUDA_HOME variable not set. Setting CUDA_HOME=/usr/local/cuda-9.0...',)
-        os.environ['CUDA_HOME'] = '/usr/local/cuda-9.0'
+        warnings.warn('CUDA_HOME variable not set. Setting CUDA_HOME=/usr/local/cuda-10.1...',)
+        os.environ['CUDA_HOME'] = '/usr/local/cuda-10.1'
  
 fwht_py = load(name='fwht_py', sources=sources, verbose=False, extra_cflags=flags)
 

@@ -19,7 +19,6 @@
  */
 
 #include <ATen/ATen.h>
-#include <ATen/cuda/CUDAContext.h>
 
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -155,13 +154,13 @@ at::Tensor forward_fwht_cuda(at::Tensor output)
     for (; log2d > ELEMENTARY_LOG2SIZE; log2d -= 2, N >>= 2, batch_size <<= 2)
     {
         AT_DISPATCH_FLOATING_TYPES(output.type(), "forward_fwht_kernel", ([&] {
-            forward_fwht_kernel<<<grid, threads, 0, at::cuda::getCurrentCUDAStream()>>>(output.data<scalar_t>(), N / 4);
+            forward_fwht_kernel<<<grid, threads, 0, at::globalContext().getCurrentCUDAStream()>>>(output.data<scalar_t>(), N / 4);
         }));
         //getLastCudaError("fwtBatch2Kernel() execution failed\n");
     }
     
     AT_DISPATCH_FLOATING_TYPES(output.type(), "forward_fwht_shared_kernel", ([&] {
-        forward_fwht_shared_kernel<<<batch_size, N / 4, N *sizeof(scalar_t), at::cuda::getCurrentCUDAStream()>>>(output.data<scalar_t>(), log2d);
+        forward_fwht_shared_kernel<<<batch_size, N / 4, N *sizeof(scalar_t), at::globalContext().getCurrentCUDAStream()>>>(output.data<scalar_t>(), log2d);
     }));
     //getLastCudaError("forward_fwht_shared_kernel() execution failed\n"); 
     return output;
