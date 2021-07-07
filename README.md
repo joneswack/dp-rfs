@@ -34,7 +34,7 @@ This code was tested on a Google Colab instance using Python version 3.7.1, PyTo
 
 ### A note on using GPU-accelerated SRHT sketches
 
-PyTorch does not natively support the Fast Walsh Hadamard transform. This repository contains an implementation including CUDA kernel in `util/fwht`. This kernel is needed for GPU-accelerated TensorSRHT sketches.
+PyTorch does not natively support the Fast Walsh Hadamard Transform. This repository contains an implementation including CUDA kernel in `util/fwht`. This kernel is needed for GPU-accelerated TensorSRHT sketches.
 If you want to use this implementation, you also need to have CUDA **10.1** installed.
 
 Then you run the following command in your terminal prior to launching any other code:
