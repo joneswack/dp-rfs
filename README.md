@@ -30,8 +30,6 @@ In case you have a lower version, you cannot use the complex projections in our 
 
 This code was tested on a Google Colab instance using Python version 3.7.1, PyTorch 1.9 (with CUDA 10.2) on an NVIDIA Tesla V100 graphics card with 16GB RAM. Depending on the size of the dataset and the projection dimension, much less RAM may be sufficient.
 
-## Getting started
-
 ### A note on using GPU-accelerated SRHT sketches
 
 PyTorch does not natively support the Fast Walsh Hadamard Transform. This repository contains an implementation including CUDA kernel in `util/fwht`. This kernel is needed for GPU-accelerated TensorSRHT sketches.
@@ -53,6 +51,8 @@ if torch.cuda.is_available():
         warnings.warn('CUDA_HOME variable not set. Setting CUDA_HOME=/usr/local/cuda-10.1...',)
         os.environ['CUDA_HOME'] = '/usr/local/cuda-10.1'
 ```
+
+## Getting started
 
 ### Polynomial sketches
 
