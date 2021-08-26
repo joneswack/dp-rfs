@@ -17,8 +17,10 @@ def generate_rademacher_samples(shape, complex_weights=False):
         support = torch.tensor([1j, -1j, 1, -1], dtype=torch.complex64)
     else:
         support = torch.tensor([1, -1], dtype=torch.float32)
-    samples = torch.index_select(support, 0, torch.randint(len(support), shape).view(-1))
-    return samples.reshape(shape)
+    #samples = torch.index_select(support, 0, torch.randint(len(support), shape).view(-1))
+    #return samples.reshape(shape)
+    indices = torch.randint(len(support), shape)
+    return support[indices]
 
 
 class CountSketch(torch.nn.Module):
