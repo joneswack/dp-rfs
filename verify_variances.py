@@ -14,7 +14,18 @@ def get_pairwise_elements(X):
 
     return (dot_product_squared, squared_dot_product, norms_squared)
 
-## TODO: Implement Gaussian variance
+def var_gaussian_real(X, p=1., D=1.):
+    dot_product_squared, _, norms_squared = get_pairwise_elements(X)
+    moment_2 = (norms_squared + 2. * dot_product_squared)**p
+    
+    return (moment_2 - dot_product_squared**p) / D
+
+def var_gaussian_comp_real(X, p=1., D=1.):
+    dot_product_squared, _, norms_squared = get_pairwise_elements(X)
+    moment_2_comp = (norms_squared + dot_product_squared)**p
+    moment_2_real = (2. * dot_product_squared)**p
+
+    return (0.5 * (moment_2_comp + moment_2_real) - dot_product_squared**p) / D
 
 def var_rademacher_real(X, p=1., D=1.):
     dot_product_squared, squared_dot_product, norms_squared = get_pairwise_elements(X)
@@ -62,17 +73,20 @@ if __name__ == "__main__":
     bias = 1.-2./a**2
     lengthscale = a / np.sqrt(2.)
 
-    # train_data = torch.rand(10000, 2, dtype=torch.float64)
+    var_function = lambda X, p, D: var_gaussian_comp_real(X, p, D)
+    real_var_function = lambda X, p, D: var_gaussian_real(X, p, D)
+
+    train_data = torch.randn(10000, 128, dtype=torch.float64)
     # train_data = torch.tensor([[0, 1], [1, 0]], dtype=torch.float64)
     # train_data = train_data / train_data.norm(dim=1, keepdim=True)
 
-    #train_data, train_labels = torch.load('../datasets/export/fashion_mnist/pytorch/train_fashion_mnist.pth')
-    #test_data, test_labels = torch.load('../datasets/export/fashion_mnist/pytorch/test_fashion_mnist.pth')
+    # train_data, train_labels = torch.load('../datasets/export/fashion_mnist/pytorch/train_fashion_mnist.pth')
+    # test_data, test_labels = torch.load('../datasets/export/fashion_mnist/pytorch/test_fashion_mnist.pth')
 
     # train_data, train_labels = torch.load('../datasets/export/mnist/pytorch/train_mnist.pth')
     # test_data, test_labels = torch.load('../datasets/export/mnist/pytorch/test_mnist.pth')
 
-    train_data, train_labels = torch.load('../datasets/export/adult/pytorch/train_adult.pth')
+    # train_data, train_labels = torch.load('../datasets/export/adult/pytorch/train_adult.pth')
     # test_data, test_labels = torch.load('../datasets/export/adult/pytorch/test_adult.pth')
 
     # train_data, train_labels = torch.load('../datasets/export/eeg/pytorch/eeg.pth')
@@ -83,29 +97,31 @@ if __name__ == "__main__":
 
     indices = torch.randint(len(train_data), (1000,))
     train_data = train_data[indices]
-    train_labels = train_labels[indices]
 
     power_2_pad = int(2**np.ceil(np.log2(train_data.shape[1])))
 
-    placeholder = torch.zeros(len(train_data), power_2_pad)
-    placeholder[:, :train_data.shape[1]] = train_data / lengthscale
-    placeholder[:, train_data.shape[1]] = np.sqrt(bias)
-    train_data = placeholder
+    # placeholder = torch.zeros(len(train_data), power_2_pad)
+    # placeholder[:, :train_data.shape[1]] = train_data / lengthscale
+    # placeholder[:, train_data.shape[1]] = np.sqrt(bias)
+    # train_data = placeholder
 
     for degree in range(2, 10):
-        var_comp_real, cov_comp_real = var_tensor_srht_comp_real(train_data, p=degree, D=train_data.shape[1])
-        var_real, cov_real = var_tensor_srht_real(train_data, p=degree, D=2.*train_data.shape[1])
+        #var_comp_real, cov_comp_real = var_function(train_data, p=degree, D=train_data.shape[1])
+        #var_real, cov_real = real_var_function(train_data, p=degree, D=2.*train_data.shape[1])
+
+        var_comp_real = var_function(train_data, p=degree, D=train_data.shape[1])
+        var_real = real_var_function(train_data, p=degree, D=2.*train_data.shape[1])
         
         sum_pos = float(((var_real - var_comp_real) > 0).sum().item())
-        sum_pos_cov = float(((cov_real - cov_comp_real) > 0).sum().item())
+        #sum_pos_cov = float(((cov_real - cov_comp_real) > 0).sum().item())
 
-        neg_cov_indices = ((cov_real - cov_comp_real) < 0).nonzero(as_tuple=True)
+        #neg_cov_indices = ((cov_real - cov_comp_real) < 0).nonzero(as_tuple=True)
 
 
         print(
             'Degree:', degree,
             'Var advantage: {} / {} ({:.2f} %)'.format(sum_pos, len(train_data)**2, sum_pos / float(len(train_data)**2) * 100),
-            'Cov advantage: {} / {} ({:.2f} %)'.format(sum_pos_cov, len(train_data)**2, sum_pos_cov / float(len(train_data)**2) * 100),
+            #'Cov advantage: {} / {} ({:.2f} %)'.format(sum_pos_cov, len(train_data)**2, sum_pos_cov / float(len(train_data)**2) * 100),
         )
 
 
@@ -118,7 +134,7 @@ if __name__ == "__main__":
     n_points = 5
     data = torch.rand(n_points, d)
     data = data / data.norm(dim=1, keepdim=True)
-    var_function = lambda X, p, D: var_tensor_srht_comp_real(X, p, D)
+    var_function = lambda X, p, D: var_gaussian_comp_real(X, p, D)
 
     def reference_kernel(data, k, c=0, lengthscale=1.):
         data = data / lengthscale
@@ -134,7 +150,7 @@ if __name__ == "__main__":
         var = 1.,
         ard = False,
         trainable_kernel=False,
-        projection_type='srht',
+        projection_type='gaussian',
         hierarchical=False,
         complex_weights=True
     )
