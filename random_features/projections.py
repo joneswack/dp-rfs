@@ -2,13 +2,13 @@ import torch
 import numpy as np
 import math
 
-from torch._C import dtype
+#from torch._C import dtype, float32
 
-if int(torch.__version__.split('.')[1]) > 1:
-    # if number after first dot is larger than 1, use the new library
-    from util.fwht.fwht import FastWalshHadamardTransform
-else:
-    from util.fwht_old.fwht import FastWalshHadamardTransform
+# if int(torch.__version__.split('.')[1]) > 1:
+#     # if number after first dot is larger than 1, use the new library
+#     from util.fwht.fwht import FastWalshHadamardTransform
+# else:
+#     from util.fwht_old.fwht import FastWalshHadamardTransform
 
 
 def generate_rademacher_samples(shape, complex_weights=False):
@@ -26,7 +26,7 @@ def generate_rademacher_samples(shape, complex_weights=False):
 class CountSketch(torch.nn.Module):
     """ Computes the CountSketch Cx that can take advantage of data sparsity. """
 
-    def __init__(self, d_in, d_features, sketch_type='sparse'):
+    def __init__(self, d_in, d_features, sketch_type='sparse', complex_weights=False, full_complex=False):
         """
         d_in: Data input dimension
         d_features: Projection dimension
@@ -39,6 +39,8 @@ class CountSketch(torch.nn.Module):
         self.d_in = d_in
         self.d_features = d_features
         self.sketch_type = sketch_type
+        self.complex_weights = complex_weights
+        self.full_complex = full_complex
 
         self.i_hash = torch.nn.Parameter(None, requires_grad=False)
         self.s_hash = torch.nn.Parameter(None, requires_grad=False)
@@ -46,7 +48,9 @@ class CountSketch(torch.nn.Module):
 
     def resample(self):
         self.i_hash.data = torch.randint(low=0, high=self.d_features, size=(self.d_in,))
-        self.s_hash.data = generate_rademacher_samples((self.d_in,))
+        if self.complex_weights:
+            self.i_hash.data = self.i_hash.data + 1j*torch.randint(low=0, high=self.d_features, size=(self.d_in,))
+        self.s_hash.data = generate_rademacher_samples((self.d_in,), complex_weights=self.complex_weights)
 
         if self.sketch_type == 'sparse' or self.sketch_type == 'dense':
             # if we use sparse or dense sketch_type, the matrices can be precomputed
@@ -69,7 +73,12 @@ class CountSketch(torch.nn.Module):
         elif self.sketch_type == 'dense':
             output = torch.mm(x, self.P.t())
         else:
-            output = torch.zeros(x.shape[0], self.d_features).type(torch.FloatTensor)
+            dtype = torch.complex64 if self.complex_weights else torch.float32
+            # output = torch.zeros(x.shape[0], self.d_features).type(dtype)
+            if self.complex_weights:
+                output = torch.zeros(x.shape[0], self.d_features, 2).type(torch.float32)
+            else:
+                output = torch.zeros(x.shape[0], self.d_features).type(torch.float32)
             if x.is_cuda:
                 output = output.cuda()
             x = x * self.s_hash
@@ -79,7 +88,18 @@ class CountSketch(torch.nn.Module):
                 # this might be a bit inefficient. scattering entire columns would be better
                 # BUT: scatter_add uses atomicAdd on cuda, on cpu it is a c++ loop
                 # CPU speedup is around x10 compared to a dense matrix vector product
-                output.scatter_add_(dim=-1, index=self.i_hash.expand(*x.shape), src=x)
+                if self.complex_weights:
+                    if self.full_complex:
+                        # we use different hashes
+                        output[..., 0].scatter_add_(dim=-1, index=self.i_hash.real.expand(*x.shape).type(torch.int64), src=x.real)
+                        output[..., 1].scatter_add_(dim=-1, index=self.i_hash.imag.expand(*x.shape).type(torch.int64), src=x.imag)
+                    else:
+                        # we use the same hash twice
+                        output[..., 0].scatter_add_(dim=-1, index=self.i_hash.real.expand(*x.shape).type(torch.int64), src=x.real)
+                        output[..., 1].scatter_add_(dim=-1, index=self.i_hash.real.expand(*x.shape).type(torch.int64), src=x.imag)
+                    output = torch.view_as_complex(output)
+                else:
+                    output.scatter_add_(dim=-1, index=self.i_hash.expand(*x.shape), src=x)
             else:
                 output.index_add_(dim=-1, index=self.i_hash, source=x)
 

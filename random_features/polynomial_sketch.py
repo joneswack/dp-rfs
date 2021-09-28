@@ -1,3 +1,4 @@
+from numpy.core.numeric import full
 import torch
 import numpy as np
 import sys, os
@@ -120,7 +121,8 @@ class PolynomialSketch(torch.nn.Module):
     """
 
     def __init__(self, d_in, d_features, degree=2, bias=0, lengthscale='auto', var=1.0, ard=False, trainable_kernel=False,
-                    dtype=torch.FloatTensor, projection_type='countsketch_sparse', hierarchical=False, complex_weights=False):
+                    dtype=torch.FloatTensor, projection_type='countsketch_sparse', hierarchical=False, complex_weights=False,
+                    full_complex=False):
         """
         d_in: Data input dimension
         d_features: Projection dimension
@@ -142,6 +144,7 @@ class PolynomialSketch(torch.nn.Module):
         self.projection_type = projection_type
         self.hierarchical = hierarchical
         self.complex_weights = complex_weights
+        self.full_complex = full_complex
 
         # we initialize the kernel hyperparameters
         self.log_bias = None
@@ -165,7 +168,8 @@ class PolynomialSketch(torch.nn.Module):
         elif projection_type == 'gaussian':
             projection = lambda d_in, d_out: GaussianTransform(d_in, d_out, complex_weights=complex_weights)
         elif projection_type.split('_')[0] == 'countsketch':
-            projection = lambda d_in, d_out: CountSketch(d_in, d_out, sketch_type=projection_type.split('_')[1])
+            projection = lambda d_in, d_out: CountSketch(d_in, d_out, sketch_type=projection_type.split('_')[1],
+                complex_weights=complex_weights, full_complex=full_complex)
 
         # the number of leaf nodes is p
         if self.hierarchical:
@@ -199,7 +203,10 @@ class PolynomialSketch(torch.nn.Module):
             current_output = ls.forward(x)
 
             if isinstance(ls, CountSketch):
-                current_output = torch.fft.rfft(current_output, n=self.d_features)
+                if self.complex_weights:
+                    current_output = torch.fft.fft(current_output, n=self.d_features)
+                else:
+                    current_output = torch.fft.rfft(current_output, n=self.d_features)
             
             if i == 0:
                 output = current_output
@@ -207,7 +214,10 @@ class PolynomialSketch(torch.nn.Module):
                 output = output * current_output
 
         if isinstance(ls, CountSketch):
-            output = torch.fft.irfft(output, n=self.d_features)
+            if self.complex_weights:
+                output = torch.fft.ifft(output, n=self.d_features)
+            else:
+                output = torch.fft.irfft(output, n=self.d_features)
         else:
             output = output / np.sqrt(self.d_features)
         
@@ -249,8 +259,17 @@ if __name__ == "__main__":
         return (data.mm(data.t()) + c)**k
 
     torch.manual_seed(0)
-    data = torch.randn(100, 7)
-    data = data - data.mean(dim=0)
+    #data = torch.rand(100, 127)
+    #data = data - data.mean(dim=0)
+    # data, train_labels = torch.load('../datasets/export/cifar10/pytorch/train_cifar10_resnet34_final.pth')
+    # data, train_labels = torch.load('../datasets/export/mnist/pytorch/train_mnist.pth')
+    data, train_labels = torch.load('../datasets/export/fashion_mnist/pytorch/train_fashion_mnist.pth')
+    # data, train_labels = torch.load('../datasets/export/eeg/pytorch/eeg.pth')
+    data = data.view(len(data), -1)
+    #data = data - data.mean(dim=0)
+    indices = torch.randint(len(data), (1000,))
+    data = data[indices]
+
     data = data / data.norm(dim=1, keepdim=True)
 
     degree = 20
@@ -258,6 +277,7 @@ if __name__ == "__main__":
     bias = 1.-2./a**2
     lengthscale = a / np.sqrt(2.)
     complex_weights = True
+    full_complex = True
     hierarchical = False
     projection_type = 'rademacher'
 
@@ -265,12 +285,12 @@ if __name__ == "__main__":
 
     # dims = [1024, 2048, 4096, 8192, 2*8192]
     # dims = [2*8000]
-    dims = [1024 * i for i in range(1, 10)]
+    dims = [512 * i for i in range(1, 6)]
     # dims = [20*1024]
 
     for D in dims:
         scores = []
-        for seed in np.arange(10):
+        for seed in np.arange(30):
             torch.manual_seed(seed)
 
             ts = PolynomialSketch(
@@ -285,6 +305,7 @@ if __name__ == "__main__":
                 projection_type=projection_type,
                 hierarchical=hierarchical,
                 complex_weights=complex_weights,
+                full_complex=full_complex
             )
             ts.resample()
             # features = tensorsketch(data, 2, 0, num_features=10000)
