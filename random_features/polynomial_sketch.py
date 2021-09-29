@@ -263,8 +263,8 @@ if __name__ == "__main__":
     #data = data - data.mean(dim=0)
     # data, train_labels = torch.load('../datasets/export/cifar10/pytorch/train_cifar10_resnet34_final.pth')
     # data, train_labels = torch.load('../datasets/export/mnist/pytorch/train_mnist.pth')
-    data, train_labels = torch.load('../datasets/export/fashion_mnist/pytorch/train_fashion_mnist.pth')
-    # data, train_labels = torch.load('../datasets/export/eeg/pytorch/eeg.pth')
+    # data, train_labels = torch.load('../datasets/export/fashion_mnist/pytorch/train_fashion_mnist.pth')
+    data, train_labels = torch.load('../datasets/export/eeg/pytorch/eeg.pth')
     data = data.view(len(data), -1)
     #data = data - data.mean(dim=0)
     indices = torch.randint(len(data), (1000,))
@@ -279,7 +279,7 @@ if __name__ == "__main__":
     complex_weights = True
     full_complex = True
     hierarchical = False
-    projection_type = 'rademacher'
+    projection_type = 'countsketch_scatter'
 
     ref_kernel = reference_kernel(data, degree, bias, log_lengthscale=np.log(lengthscale))
 

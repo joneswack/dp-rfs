@@ -47,9 +47,10 @@ class CountSketch(torch.nn.Module):
         self.P = torch.nn.Parameter(None, requires_grad=False)
 
     def resample(self):
-        self.i_hash.data = torch.randint(low=0, high=self.d_features, size=(self.d_in,))
         if self.complex_weights:
             self.i_hash.data = self.i_hash.data + 1j*torch.randint(low=0, high=self.d_features, size=(self.d_in,))
+        else:
+            self.i_hash.data = torch.randint(low=0, high=self.d_features, size=(self.d_in,))
         self.s_hash.data = generate_rademacher_samples((self.d_in,), complex_weights=self.complex_weights)
 
         if self.sketch_type == 'sparse' or self.sketch_type == 'dense':
