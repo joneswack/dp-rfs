@@ -122,7 +122,7 @@ class PolynomialSketch(torch.nn.Module):
 
     def __init__(self, d_in, d_features, degree=2, bias=0, lengthscale='auto', var=1.0, ard=False, trainable_kernel=False,
                     dtype=torch.FloatTensor, projection_type='countsketch_sparse', hierarchical=False, complex_weights=False,
-                    full_complex=False):
+                    full_complex=False, full_cov=False):
         """
         d_in: Data input dimension
         d_features: Projection dimension
@@ -162,7 +162,7 @@ class PolynomialSketch(torch.nn.Module):
         self.log_var = torch.nn.Parameter(torch.ones(1).type(dtype) * np.log(var), requires_grad=trainable_kernel)
 
         if projection_type == 'srht':
-            projection = lambda d_in, d_out: SRHT(d_in, d_out, complex_weights=complex_weights)
+            projection = lambda d_in, d_out: SRHT(d_in, d_out, complex_weights=complex_weights, full_cov=full_cov)
         elif projection_type == 'rademacher':
             projection = lambda d_in, d_out: RademacherTransform(d_in, d_out, complex_weights=complex_weights)
         elif projection_type == 'gaussian':

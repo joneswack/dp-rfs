@@ -4,11 +4,11 @@ import math
 
 #from torch._C import dtype, float32
 
-# if int(torch.__version__.split('.')[1]) > 1:
-#     # if number after first dot is larger than 1, use the new library
-#     from util.fwht.fwht import FastWalshHadamardTransform
-# else:
-#     from util.fwht_old.fwht import FastWalshHadamardTransform
+if int(torch.__version__.split('.')[1]) > 1:
+    # if number after first dot is larger than 1, use the new library
+    from util.fwht.fwht import FastWalshHadamardTransform
+else:
+    from util.fwht_old.fwht import FastWalshHadamardTransform
 
 
 def generate_rademacher_samples(shape, complex_weights=False):
@@ -110,7 +110,7 @@ class CountSketch(torch.nn.Module):
 class SRHT(torch.nn.Module):
     """ Subsampled randomized Hadamard transform (SRHT) HDx. """
 
-    def __init__(self, d_in, d_features, complex_weights=False, shuffle=True, k=1):
+    def __init__(self, d_in, d_features, complex_weights=False, shuffle=True, k=1, full_cov=False):
         """
         d_in: Data input dimension (needs to be a power of 2)
         d_features: Projection dimension
@@ -126,16 +126,25 @@ class SRHT(torch.nn.Module):
         self.complex_weights = complex_weights
         self.shuffle = shuffle
         self.k = k
+        self.full_cov = full_cov
 
         self.rad = torch.nn.Parameter(None, requires_grad=False)
         self.permutations = torch.nn.Parameter(None, requires_grad=False)
 
     def resample(self):
-        self.rad.data = generate_rademacher_samples(
-            (self.k, self.num_blocks, self.d_in), complex_weights=self.complex_weights)
-        # generate an index permutation per block
-        self.permutations.data = torch.cat(
-            [i*self.d_in + torch.randperm(self.d_in) for i in range(self.num_blocks)], dim=0)
+        if self.full_cov:
+            # we copy D_i for different blocks
+            self.rad.data = generate_rademacher_samples(
+                (self.k, 1, self.d_in), complex_weights=self.complex_weights)
+            self.rad.data = self.rad.data.expand(self.k, self.num_blocks, self.d_in)
+            # generate an index permutation over B*d
+            self.permutations.data = torch.randperm(self.num_blocks * self.d_in)
+        else:
+            self.rad.data = generate_rademacher_samples(
+                (self.k, self.num_blocks, self.d_in), complex_weights=self.complex_weights)
+            # generate an index permutation per block
+            self.permutations.data = torch.cat(
+                [i*self.d_in + torch.randperm(self.d_in) for i in range(self.num_blocks)], dim=0)
     
     def forward(self, x):
         # we convert x to a matrix

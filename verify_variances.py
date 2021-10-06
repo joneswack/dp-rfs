@@ -1,3 +1,4 @@
+from numpy.core.numeric import full
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
@@ -79,16 +80,25 @@ def var_tensor_srht_comp(X, p=1., D=1.):
 
     return vars, cov_term
 
-def var_tensor_srht_comp_real(X, p=1., D=1.):
+def var_tensor_srht_comp_real(X, p=1., D=1., full_cov=False):
     dot_product_squared, squared_dot_product, norms_squared = get_pairwise_elements(X)
     d = X.shape[1]
-    num_non_zero_pairs = np.floor(D / d)*d*(d-1) + (D % d) * (D % d - 1)
+
+    if full_cov:
+        num_non_zero_pairs = D*(D-1.)
+    else:
+        num_non_zero_pairs = np.floor(D / d)*d*(d-1) + (D % d) * (D % d - 1)
+
+    if full_cov:
+        block_coef = 1./(np.ceil(D / d)*d-1.)
+    else:
+        block_coef = 1./(d-1.)
 
     var_term = var_rademacher_comp_real(X, p, D)
     cov_term = num_non_zero_pairs / D**2 * \
-        ((dot_product_squared - 1./(d-1.) * (dot_product_squared - squared_dot_product))**p - dot_product_squared**p)
+        ((dot_product_squared - block_coef * (dot_product_squared - squared_dot_product))**p - dot_product_squared**p)
     cov_term += num_non_zero_pairs / D**2 * \
-        ((dot_product_squared - 1./(d-1.) * (norms_squared - squared_dot_product))**p - dot_product_squared**p)
+        ((dot_product_squared - block_coef * (norms_squared - squared_dot_product))**p - dot_product_squared**p)
     cov_term *= 0.5
 
     return var_term + cov_term, cov_term
@@ -113,9 +123,12 @@ if __name__ == "__main__":
     bias = 1.-2./a**2
     lengthscale = a / np.sqrt(2.)
 
-    var_function = lambda X, p, D: var_tensor_srht_comp_real(X, p, D)
-    real_var_function = lambda X, p, D: var_tensor_srht_real(X, p, D)
-    comp_var_function = lambda X, p, D: var_tensor_srht_comp(X, p, D)
+    #var_function = lambda X, p, D: var_tensor_srht_comp_real(X, p, D)
+    #real_var_function = lambda X, p, D: var_tensor_srht_real(X, p, D)
+    #comp_var_function = lambda X, p, D: var_tensor_srht_comp(X, p, D)
+
+    real_var_function = lambda X, p, D: var_rademacher_comp_real(X, p, 10.*D)
+    comp_var_function = lambda X, p, D: var_tensor_srht_comp_real(X, p, 10.*D, full_cov=False)
 
     fig, axs = plt.subplots(1, 4, figsize=(12,3))
 
@@ -145,17 +158,17 @@ if __name__ == "__main__":
         train_data = train_data.reshape(len(train_data), -1)
         #train_data = train_data / train_data.shape[1]
 
-        #train_data = train_data - train_data.mean(dim=0)
+        train_data = train_data - train_data.mean(dim=0)
 
-        #train_data = train_data / train_data.norm(dim=1, keepdim=True)
+        # train_data = train_data / train_data.norm(dim=1, keepdim=True)
 
         indices = torch.randint(len(train_data), (1000,))
         train_data = train_data[indices].double()
 
-        #lengthscale = torch.cdist(train_data, train_data, p=2.).median()
-        #train_data = train_data / lengthscale
+        lengthscale = torch.cdist(train_data, train_data, p=2.).median()
+        # train_data = train_data / lengthscale
 
-        train_data = train_data / train_data.norm(dim=1, keepdim=True)
+        # train_data = train_data / train_data.norm(dim=1, keepdim=True)
 
         power_2_pad = int(2**np.ceil(np.log2(train_data.shape[1])))
 
@@ -169,8 +182,8 @@ if __name__ == "__main__":
             #var_real, cov_real = real_var_function(train_data, p=degree, D=2.*train_data.shape[1])
 
             #var_comp_real = var_function(train_data, p=degree, D=train_data.shape[1])
-            var_comp, _ = comp_var_function(train_data, p=degree, D=2.*power_2_pad)
-            var_real, _ = real_var_function(train_data, p=degree, D=2.*power_2_pad)
+            var_comp, _ = comp_var_function(train_data, p=degree, D=power_2_pad)
+            var_real = real_var_function(train_data, p=degree, D=power_2_pad)
 
             var_comp[var_comp < 0] = 0
             var_real[var_real < 0] = 0
@@ -261,7 +274,7 @@ if __name__ == "__main__":
     #plt.yscale('log')
 
     plt.tight_layout()
-    plt.savefig('figures/tensor_srht_ecdfs_2d.pdf', dpi=300)
+    #plt.savefig('figures/tensor_srht_ecdfs_2d.pdf', dpi=300)
     plt.show()
     exit()
 
