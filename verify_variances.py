@@ -103,7 +103,12 @@ def var_tensor_srht_comp_real(X, p=1., D=1., full_cov=False):
 
     return var_term + cov_term, cov_term
 
-
+def pseudo_var_tensor_sketch(X, p, D):
+    # for p=1, we know: (x.T y)^2 + |x|^2 |y|^2 - 2*sum(x_i^2 y_i^2)
+    # for p>1, we use the tensorized version:
+    # (x.T y)^2p + |x|^2p |y|^2p - 2*sum(x_i^2 y_i^2)^p
+    dot_product_squared, squared_dot_product, norms_squared = get_pairwise_elements(X)
+    return (dot_product_squared**p + norms_squared**p - 2.*squared_dot_product**p) / D
 
 
 if __name__ == "__main__":
@@ -280,13 +285,13 @@ if __name__ == "__main__":
     # exit()
 
     # Variance test to verify variance formulas
-    n = 1
+    n = 3
     d = 128
-    D = 150
+    D = 512
     n_points = 5
     data = torch.rand(n_points, d)
     data = data / data.norm(dim=1, keepdim=True)
-    var_function = lambda X, p, D: var_tensor_srht_comp_real(X, p, D, full_cov=True)
+    var_function = lambda X, p, D: pseudo_var_tensor_sketch(X, p, D)
 
     def reference_kernel(data, k, c=0, lengthscale=1.):
         data = data / lengthscale
@@ -302,10 +307,10 @@ if __name__ == "__main__":
         var = 1.,
         ard = False,
         trainable_kernel=False,
-        projection_type='srht',
+        projection_type='countsketch_scatter',
         hierarchical=False,
-        complex_weights=True,
-        full_cov=True
+        complex_weights=False,
+        full_cov=False
     )
 
     app_kernel_values = []
@@ -317,7 +322,7 @@ if __name__ == "__main__":
     for _ in range(10000):
         ts.resample()
         y = ts.forward(data)
-        y = torch.cat([y.real, y.imag], dim=1)
+        #y = torch.cat([y.real, y.imag], dim=1)
         approx_kernel = y @ y.t()
         app_kernel_values.append(approx_kernel)
 
@@ -326,7 +331,7 @@ if __name__ == "__main__":
     print(np.array(scores).mean())
 
     estimated_variance = torch.stack(app_kernel_values, dim=0).var(dim=0) #.sum(dim=-1)
-    exact_variance, _ = var_function(data, n, D)
+    exact_variance = var_function(data, n, D)
 
     print('Estimated', estimated_variance)
     print('Exact', exact_variance)
