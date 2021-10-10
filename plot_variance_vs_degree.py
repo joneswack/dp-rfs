@@ -10,9 +10,9 @@ from random_features.polynomial_sketch import PolynomialSketch
 def gaussian_kernel_coefs(n):
     return 1./factorial(n)
 
-mc_samples = 100
+mc_samples = 200
 
-a = 4.
+a = 2.
 bias = 1.-2./a**2
 lengthscale = a / np.sqrt(2.)
 #lengthscale = 1.
@@ -21,11 +21,12 @@ lengthscale = a / np.sqrt(2.)
 if __name__ == "__main__":
 
     for idx, dataset in enumerate([
-        #('EEG', '../datasets/export/boston/pytorch/boston.pth'),
+        ('EEG', '../datasets/export/eeg/pytorch/eeg.pth'),
+        # ('Adult', '../datasets/export/adult/pytorch/train_adult.pth'),
         # ('CIFAR10 Conv', '../datasets/export/cifar10/pytorch/train_cifar10_resnet34_final.pth'),
-        ('MNIST', '../datasets/export/mnist/pytorch/train_mnist.pth'),
-        ('Fashion MNIST', '../datasets/export/fashion_mnist/pytorch/train_fashion_mnist.pth'),
-        ('Gisette', '../datasets/export/gisette/pytorch/train_gisette.pth')
+        # ('MNIST', '../datasets/export/mnist/pytorch/train_mnist.pth'),
+        # ('Fashion MNIST', '../datasets/export/fashion_mnist/pytorch/train_fashion_mnist.pth'),
+        # ('Gisette', '../datasets/export/gisette/pytorch/train_gisette.pth')
     ]):
 
         train_data, train_labels = torch.load(dataset[1])
