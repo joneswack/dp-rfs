@@ -11,7 +11,7 @@ from random_features.polynomial_sketch import PolynomialSketch
 def gaussian_kernel_coefs(n):
     return 1./factorial(n)
 
-mc_samples = 500
+mc_samples = 1000
 
 a = 2.
 bias = 1.-2./a**2
@@ -101,7 +101,7 @@ if __name__ == "__main__":
                 projection_type='countsketch_scatter',
                 hierarchical=False,
                 complex_weights=False,
-                full_cov=False
+                full_cov=True
             )
 
             squared_errors = torch.zeros_like(ref_kernel)
@@ -133,11 +133,11 @@ if __name__ == "__main__":
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # comp_rad_vars.append(degree_var.view(-1).numpy().mean())
 
-            degree_var, _ = var_tensor_srht_real(train_data, p=degree, D=D)
+            # degree_var, _ = var_tensor_srht_real(train_data, p=degree, D=D)
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # srht_vars.append(degree_var.view(-1).numpy().mean())
 
-            # degree_var, _ = var_tensor_srht_comp_real(train_data, p=degree, D=D//2., full_cov=True)
+            degree_var, _ = var_tensor_srht_comp_real(train_data, p=degree, D=D//2., full_cov=True)
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # comp_srht_vars.append(degree_var.view(-1).numpy().mean())
 
@@ -169,5 +169,5 @@ if __name__ == "__main__":
         axs[idx].hlines(y=0.5, xmin=-0.1, xmax=2.0, colors='black', label='', linestyles='dashed')
         axs[idx].legend(ncol=2, loc='upper center', bbox_to_anchor=(0.5, -0.3))
     plt.tight_layout()
-    plt.savefig('figures/real_tensor_srht_tensor_sketch.pdf', dpi=300, bbox_inches="tight")
+    # plt.savefig('figures/real_tensor_srht_tensor_sketch.pdf', dpi=300, bbox_inches="tight")
     plt.show()
