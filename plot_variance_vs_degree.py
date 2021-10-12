@@ -38,6 +38,7 @@ if __name__ == "__main__":
     for idx, dataset in enumerate([
         ('EEG', '../datasets/export/eeg/pytorch/eeg.pth'),
         ('Adult', '../datasets/export/adult/pytorch/train_adult.pth'),
+        # ('Drive', '../datasets/export/drive/pytorch/drive.pth'),
         ('CIFAR10 Conv', '../datasets/export/cifar10/pytorch/train_cifar10_resnet34_final.pth'),
         ('MNIST', '../datasets/export/mnist/pytorch/train_mnist.pth'),
         # ('Fashion MNIST', '../datasets/export/fashion_mnist/pytorch/train_fashion_mnist.pth'),
@@ -48,13 +49,13 @@ if __name__ == "__main__":
 
         train_data = train_data.reshape(len(train_data), -1)
 
-        # train_data = train_data - train_data.mean(dim=0)
+        train_data = train_data - train_data.mean(dim=0)
 
-        torch.manual_seed(0)
-        np.random.seed(0)
+        torch.manual_seed(42)
+        np.random.seed(42)
 
         indices = torch.randint(len(train_data), (1000,))
-        train_data = train_data[indices] #.double()
+        train_data = train_data[indices] # .double()
 
         # lengthscale = torch.cdist(train_data, train_data, p=2.).median()
         # train_data = train_data / lengthscale
