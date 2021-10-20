@@ -285,9 +285,9 @@ if __name__ == "__main__":
     # exit()
 
     # Variance test to verify variance formulas
-    n = 3
-    d = 128
-    D = 512
+    n = 2
+    d = 8
+    D = 128
     n_points = 5
     data = torch.rand(n_points, d)
     data = data / data.norm(dim=1, keepdim=True)
@@ -309,8 +309,10 @@ if __name__ == "__main__":
         trainable_kernel=False,
         projection_type='countsketch_scatter',
         hierarchical=False,
-        complex_weights=False,
-        full_cov=False
+        complex_weights=True,
+        full_cov=False,
+        convolute_ts=False,
+        blockwise=True
     )
 
     app_kernel_values = []
@@ -319,10 +321,10 @@ if __name__ == "__main__":
 
     ref_kernel = reference_kernel(data, n, c=0, lengthscale=1.)
     
-    for _ in range(10000):
+    for _ in range(10):
         ts.resample()
         y = ts.forward(data)
-        #y = torch.cat([y.real, y.imag], dim=1)
+        y = torch.cat([y.real, y.imag], dim=1)
         approx_kernel = y @ y.t()
         app_kernel_values.append(approx_kernel)
 
@@ -330,11 +332,11 @@ if __name__ == "__main__":
         scores.append(score.item())
     print(np.array(scores).mean())
 
-    estimated_variance = torch.stack(app_kernel_values, dim=0).var(dim=0) #.sum(dim=-1)
-    exact_variance = var_function(data, n, D)
+    # estimated_variance = torch.stack(app_kernel_values, dim=0).var(dim=0) #.sum(dim=-1)
+    # exact_variance = var_function(data, n, D)
 
-    print('Estimated', estimated_variance)
-    print('Exact', exact_variance)
-    print('Rel. difference', (estimated_variance - exact_variance) / estimated_variance)
+    # print('Estimated', estimated_variance)
+    # print('Exact', exact_variance)
+    # print('Rel. difference', (estimated_variance - exact_variance) / estimated_variance)
 
-    print('Done!')
+    # print('Done!')

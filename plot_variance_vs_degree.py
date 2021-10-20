@@ -37,10 +37,10 @@ if __name__ == "__main__":
 
     for idx, dataset in enumerate([
         ('EEG', '../datasets/export/eeg/pytorch/eeg.pth'),
-        ('Adult', '../datasets/export/adult/pytorch/train_adult.pth'),
+        #('Adult', '../datasets/export/adult/pytorch/train_adult.pth'),
         # ('Drive', '../datasets/export/drive/pytorch/drive.pth'),
-        ('CIFAR10 Conv', '../datasets/export/cifar10/pytorch/train_cifar10_resnet34_final.pth'),
-        ('MNIST', '../datasets/export/mnist/pytorch/train_mnist.pth'),
+        #('CIFAR10 Conv', '../datasets/export/cifar10/pytorch/train_cifar10_resnet34_final.pth'),
+        #('MNIST', '../datasets/export/mnist/pytorch/train_mnist.pth'),
         # ('Fashion MNIST', '../datasets/export/fashion_mnist/pytorch/train_fashion_mnist.pth'),
         # ('Gisette', '../datasets/export/gisette/pytorch/train_gisette.pth')
     ]):
@@ -86,6 +86,7 @@ if __name__ == "__main__":
         D = int(2.*train_data.shape[1])
 
         for degree in degrees:
+            print('Degree', degree)
             # simulated TensorSketch
             ref_kernel = (train_data @ train_data.t()).pow(degree)
             # ref_kernel *= squared_prefactor.sqrt() * np.sqrt(squared_maclaurin_coefs[degree-1])
@@ -94,20 +95,24 @@ if __name__ == "__main__":
                 d_in=train_data.shape[1],
                 d_features=D,
                 degree=degree,
-                bias=0,
-                lengthscale=1.,
+                bias=bias,
+                lengthscale=lengthscale,
                 var = 1.,
                 ard = False,
                 trainable_kernel=False,
                 projection_type='countsketch_scatter',
                 hierarchical=False,
                 complex_weights=False,
-                full_cov=True
+                full_cov=False,
+                convolute_ts=False,
+                blockwise=True
             )
 
             squared_errors = torch.zeros_like(ref_kernel)
             
             for i in range(mc_samples):
+                if i % 100 == 0:
+                    print('Sample {} / {}'.format(i+1, mc_samples))
                 torch.manual_seed(i)
                 np.random.seed(i)
 

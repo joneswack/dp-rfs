@@ -1,3 +1,4 @@
+from numpy.core.shape_base import block
 import torch
 import numpy as np
 import math
@@ -26,7 +27,7 @@ def generate_rademacher_samples(shape, complex_weights=False):
 class CountSketch(torch.nn.Module):
     """ Computes the CountSketch Cx that can take advantage of data sparsity. """
 
-    def __init__(self, d_in, d_features, sketch_type='sparse', complex_weights=False, full_complex=False):
+    def __init__(self, d_in, d_features, sketch_type='sparse', complex_weights=False, full_complex=False, blockwise=False):
         """
         d_in: Data input dimension
         d_features: Projection dimension
@@ -41,17 +42,36 @@ class CountSketch(torch.nn.Module):
         self.sketch_type = sketch_type
         self.complex_weights = complex_weights
         self.full_complex = full_complex
+        self.num_blocks = math.ceil(self.d_features / self.d_in)*10 if blockwise else 1
 
-        self.i_hash = torch.nn.Parameter(None, requires_grad=False)
-        self.s_hash = torch.nn.Parameter(None, requires_grad=False)
-        self.P = torch.nn.Parameter(None, requires_grad=False)
+        self.i_hash = torch.nn.ParameterList(
+            [torch.nn.Parameter(None, requires_grad=False) for _ in range(self.num_blocks)]
+        )
+
+        self.s_hash = torch.nn.ParameterList(
+            [torch.nn.Parameter(None, requires_grad=False) for _ in range(self.num_blocks)]
+        )
+
+        self.P = torch.nn.ParameterList(
+            [torch.nn.Parameter(None, requires_grad=False) for _ in range(self.num_blocks)]
+        )
+
+        # self.i_hash = torch.nn.Parameter(None, requires_grad=False)
+        # self.s_hash = torch.nn.Parameter(None, requires_grad=False)
+        # self.P = torch.nn.Parameter(None, requires_grad=False)
 
     def resample(self):
-        if self.complex_weights:
-            self.i_hash.data = self.i_hash.data + 1j*torch.randint(low=0, high=self.d_features, size=(self.d_in,))
-        else:
-            self.i_hash.data = torch.randint(low=0, high=self.d_features, size=(self.d_in,))
-        self.s_hash.data = generate_rademacher_samples((self.d_in,), complex_weights=self.complex_weights)
+        for hash in self.i_hash:
+            # self.i_hash.data = torch.randint(low=0, high=self.d_features, size=(self.d_in,))
+            hash.data = torch.randint(low=0, high=self.d_features, size=(self.d_in,))
+            if self.complex_weights:
+                # self.i_hash.data = self.i_hash.data + 1j*torch.randint(low=0, high=self.d_features, size=(self.d_in,))
+                hash.data = hash.data + 1j*torch.randint(low=0, high=self.d_features, size=(self.d_in,))
+        # self.s_hash.data = generate_rademacher_samples((self.d_in,), complex_weights=self.complex_weights)
+        for hash in self.s_hash:
+            hash.data = generate_rademacher_samples((self.d_in,), complex_weights=self.complex_weights)
+
+        # TODO: adapt sparse and dense sketch to parameter list
 
         if self.sketch_type == 'sparse' or self.sketch_type == 'dense':
             # if we use sparse or dense sketch_type, the matrices can be precomputed
@@ -82,29 +102,33 @@ class CountSketch(torch.nn.Module):
                 output = torch.zeros(x.shape[0], self.d_features).type(torch.float32)
             if x.is_cuda:
                 output = output.cuda()
-            x = x * self.s_hash
 
-            if self.sketch_type == 'scatter':
-                # for scatter_add_ x and h need to have the same shape
-                # this might be a bit inefficient. scattering entire columns would be better
-                # BUT: scatter_add uses atomicAdd on cuda, on cpu it is a c++ loop
-                # CPU speedup is around x10 compared to a dense matrix vector product
-                if self.complex_weights:
-                    if self.full_complex:
-                        # we use different hashes
-                        output[..., 0].scatter_add_(dim=-1, index=self.i_hash.real.expand(*x.shape).type(torch.int64), src=x.real)
-                        output[..., 1].scatter_add_(dim=-1, index=self.i_hash.imag.expand(*x.shape).type(torch.int64), src=x.imag)
+            for i in range(len(self.s_hash)):
+                y = x * self.s_hash[i]
+
+                if self.sketch_type == 'scatter':
+                    # for scatter_add_ x and h need to have the same shape
+                    # this might be a bit inefficient. scattering entire columns would be better
+                    # BUT: scatter_add uses atomicAdd on cuda, on cpu it is a c++ loop
+                    # CPU speedup is around x10 compared to a dense matrix vector product
+                    if self.complex_weights:
+                        if self.full_complex:
+                            # we use different hashes
+                            output[..., 0].scatter_add_(dim=-1, index=self.i_hash[i].real.expand(*y.shape).type(torch.int64), src=y.real)
+                            output[..., 1].scatter_add_(dim=-1, index=self.i_hash[i].imag.expand(*y.shape).type(torch.int64), src=y.imag)
+                        else:
+                            # we use the same hash twice
+                            output[..., 0].scatter_add_(dim=-1, index=self.i_hash[i].real.expand(*y.shape).type(torch.int64), src=y.real)
+                            output[..., 1].scatter_add_(dim=-1, index=self.i_hash[i].real.expand(*y.shape).type(torch.int64), src=y.imag)
                     else:
-                        # we use the same hash twice
-                        output[..., 0].scatter_add_(dim=-1, index=self.i_hash.real.expand(*x.shape).type(torch.int64), src=x.real)
-                        output[..., 1].scatter_add_(dim=-1, index=self.i_hash.real.expand(*x.shape).type(torch.int64), src=x.imag)
-                    output = torch.view_as_complex(output)
+                        output.scatter_add_(dim=-1, index=self.i_hash[i].expand(*y.shape), src=y)
                 else:
-                    output.scatter_add_(dim=-1, index=self.i_hash.expand(*x.shape), src=x)
-            else:
-                output.index_add_(dim=-1, index=self.i_hash, source=x)
+                    output.index_add_(dim=-1, index=self.i_hash, source=x)
 
-        return output.reshape(original_shape)
+            if self.complex_weights:
+                output = torch.view_as_complex(output)
+
+        return output.reshape(original_shape) / np.sqrt(self.num_blocks) # self.num_blocks #  #  # 
 
 
 class SRHT(torch.nn.Module):

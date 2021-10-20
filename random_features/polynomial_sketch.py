@@ -122,7 +122,7 @@ class PolynomialSketch(torch.nn.Module):
 
     def __init__(self, d_in, d_features, degree=2, bias=0, lengthscale='auto', var=1.0, ard=False, trainable_kernel=False,
                     dtype=torch.FloatTensor, projection_type='countsketch_sparse', hierarchical=False, complex_weights=False,
-                    full_complex=False, full_cov=False):
+                    full_complex=False, full_cov=False, convolute_ts=True, blockwise=False):
         """
         d_in: Data input dimension
         d_features: Projection dimension
@@ -145,6 +145,7 @@ class PolynomialSketch(torch.nn.Module):
         self.hierarchical = hierarchical
         self.complex_weights = complex_weights
         self.full_complex = full_complex
+        self.convolute_ts = convolute_ts
 
         # we initialize the kernel hyperparameters
         self.log_bias = None
@@ -169,7 +170,7 @@ class PolynomialSketch(torch.nn.Module):
             projection = lambda d_in, d_out: GaussianTransform(d_in, d_out, complex_weights=complex_weights)
         elif projection_type.split('_')[0] == 'countsketch':
             projection = lambda d_in, d_out: CountSketch(d_in, d_out, sketch_type=projection_type.split('_')[1],
-                complex_weights=complex_weights, full_complex=full_complex)
+                complex_weights=complex_weights, full_complex=full_complex, blockwise=blockwise)
 
         # the number of leaf nodes is p
         if self.hierarchical:
@@ -203,17 +204,20 @@ class PolynomialSketch(torch.nn.Module):
             current_output = ls.forward(x)
 
             if isinstance(ls, CountSketch):
-                if self.complex_weights:
-                    current_output = torch.fft.fft(current_output, n=self.d_features)
+                if self.convolute_ts:
+                    if self.complex_weights:
+                        current_output = torch.fft.fft(current_output, n=self.d_features)
+                    else:
+                        current_output = torch.fft.rfft(current_output, n=self.d_features)
                 else:
-                    current_output = torch.fft.rfft(current_output, n=self.d_features)
+                    current_output = current_output * np.sqrt(self.d_features)
             
             if i == 0:
                 output = current_output
             else:
                 output = output * current_output
 
-        if isinstance(ls, CountSketch):
+        if isinstance(ls, CountSketch) and self.convolute_ts:
             if self.complex_weights:
                 output = torch.fft.ifft(output, n=self.d_features)
             else:
