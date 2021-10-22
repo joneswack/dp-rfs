@@ -38,9 +38,9 @@ if __name__ == "__main__":
     for idx, dataset in enumerate([
         ('EEG', '../datasets/export/eeg/pytorch/eeg.pth'),
         #('Adult', '../datasets/export/adult/pytorch/train_adult.pth'),
-        # ('Drive', '../datasets/export/drive/pytorch/drive.pth'),
-        #('CIFAR10 Conv', '../datasets/export/cifar10/pytorch/train_cifar10_resnet34_final.pth'),
-        #('MNIST', '../datasets/export/mnist/pytorch/train_mnist.pth'),
+        ('Drive', '../datasets/export/drive/pytorch/drive.pth'),
+        ('CIFAR10 Conv', '../datasets/export/cifar10/pytorch/train_cifar10_resnet34_final.pth'),
+        ('MNIST', '../datasets/export/mnist/pytorch/train_mnist.pth'),
         # ('Fashion MNIST', '../datasets/export/fashion_mnist/pytorch/train_fashion_mnist.pth'),
         # ('Gisette', '../datasets/export/gisette/pytorch/train_gisette.pth')
     ]):
@@ -49,13 +49,13 @@ if __name__ == "__main__":
 
         train_data = train_data.reshape(len(train_data), -1)
 
-        train_data = train_data - train_data.mean(dim=0)
+        # train_data = train_data - train_data.mean(dim=0)
 
         torch.manual_seed(42)
         np.random.seed(42)
 
         indices = torch.randint(len(train_data), (1000,))
-        train_data = train_data[indices] # .double()
+        train_data = train_data[indices].double()
 
         # lengthscale = torch.cdist(train_data, train_data, p=2.).median()
         # train_data = train_data / lengthscale
@@ -78,7 +78,7 @@ if __name__ == "__main__":
         srht_vars = []
         comp_srht_vars = []
 
-        degrees = list(range(1, 11))
+        degrees = list(range(1, 11, 1))
 
         squared_prefactor = squared_prefactor_train.unsqueeze(1) * squared_prefactor_train.unsqueeze(0)
         squared_maclaurin_coefs = gaussian_kernel_coefs(np.array(degrees))**2
@@ -93,19 +93,19 @@ if __name__ == "__main__":
 
             ts = PolynomialSketch(
                 d_in=train_data.shape[1],
-                d_features=D,
+                d_features=int(D),
                 degree=degree,
-                bias=bias,
-                lengthscale=lengthscale,
+                bias=0,
+                lengthscale=1.,
                 var = 1.,
                 ard = False,
                 trainable_kernel=False,
-                projection_type='countsketch_scatter',
+                projection_type='countsketch_sparse',
                 hierarchical=False,
                 complex_weights=False,
                 full_cov=False,
-                convolute_ts=False,
-                blockwise=True
+                convolute_ts=True,
+                blockwise=False
             )
 
             squared_errors = torch.zeros_like(ref_kernel)
@@ -118,7 +118,7 @@ if __name__ == "__main__":
 
                 ts.resample()
                 y = ts.forward(train_data)
-                #y = torch.cat([y.real, y.imag], dim=1)
+                # y = torch.cat([y.real, y.imag], dim=1)
                 approx_kernel = y @ y.t()
                 # approx_kernel *= squared_prefactor.sqrt() * np.sqrt(squared_maclaurin_coefs[degree-1])
                 squared_errors += (approx_kernel - ref_kernel).pow(2)
@@ -139,11 +139,11 @@ if __name__ == "__main__":
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # comp_rad_vars.append(degree_var.view(-1).numpy().mean())
 
-            # degree_var, _ = var_tensor_srht_real(train_data, p=degree, D=D)
+            degree_var, _ = var_tensor_srht_real(train_data, p=degree, D=D, full_cov=True)
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # srht_vars.append(degree_var.view(-1).numpy().mean())
 
-            degree_var, _ = var_tensor_srht_comp_real(train_data, p=degree, D=D//2., full_cov=True)
+            # degree_var, _ = var_tensor_srht_comp_real(train_data, p=degree, D=D//2., full_cov=False)
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # comp_srht_vars.append(degree_var.view(-1).numpy().mean())
 
@@ -175,5 +175,5 @@ if __name__ == "__main__":
         axs[idx].hlines(y=0.5, xmin=-0.1, xmax=2.0, colors='black', label='', linestyles='dashed')
         axs[idx].legend(ncol=2, loc='upper center', bbox_to_anchor=(0.5, -0.3))
     plt.tight_layout()
-    # plt.savefig('figures/real_tensor_srht_tensor_sketch.pdf', dpi=300, bbox_inches="tight")
+    plt.savefig('figures/real_tensor_srht_tensor_sketch.pdf', dpi=300, bbox_inches="tight")
     plt.show()

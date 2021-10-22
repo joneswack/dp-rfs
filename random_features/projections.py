@@ -42,7 +42,7 @@ class CountSketch(torch.nn.Module):
         self.sketch_type = sketch_type
         self.complex_weights = complex_weights
         self.full_complex = full_complex
-        self.num_blocks = math.ceil(self.d_features / self.d_in)*10 if blockwise else 1
+        self.num_blocks = math.ceil(self.d_features / self.d_in)*30 if blockwise else 1
 
         self.i_hash = torch.nn.ParameterList(
             [torch.nn.Parameter(None, requires_grad=False) for _ in range(self.num_blocks)]
@@ -52,9 +52,11 @@ class CountSketch(torch.nn.Module):
             [torch.nn.Parameter(None, requires_grad=False) for _ in range(self.num_blocks)]
         )
 
-        self.P = torch.nn.ParameterList(
-            [torch.nn.Parameter(None, requires_grad=False) for _ in range(self.num_blocks)]
-        )
+        if sketch_type == 'sparse' or sketch_type == 'dense':
+            p_tensor = torch.zeros(self.d_features, self.d_in).to_sparse()
+        else:
+            p_tensor = None
+        self.P = torch.nn.Parameter(p_tensor, requires_grad=False)
 
         # self.i_hash = torch.nn.Parameter(None, requires_grad=False)
         # self.s_hash = torch.nn.Parameter(None, requires_grad=False)
@@ -75,9 +77,9 @@ class CountSketch(torch.nn.Module):
 
         if self.sketch_type == 'sparse' or self.sketch_type == 'dense':
             # if we use sparse or dense sketch_type, the matrices can be precomputed
-            row = self.i_hash
+            row = self.i_hash[0]
             col = torch.arange(self.d_in)
-            values = self.s_hash
+            values = self.s_hash[0]
             indices = torch.stack([row, col], dim=0)
 
             self.P.data = torch.sparse.FloatTensor(indices, values, torch.Size([self.d_features, self.d_in]))

@@ -50,14 +50,20 @@ def var_rademacher_comp_real(X, p=1., D=1.):
 
     return (0.5 * (moment_2_comp + moment_2_real) - dot_product_squared**p) / D
 
-def var_tensor_srht_real(X, p=1., D=1.):
+def var_tensor_srht_real(X, p=1., D=1., full_cov=False):
     dot_product_squared, squared_dot_product, norms_squared = get_pairwise_elements(X)
     d = X.shape[1]
-    num_non_zero_pairs = np.floor(D / d)*d*(d-1) + (D % d) * (D % d - 1)
+
+    if full_cov:
+        num_non_zero_pairs = D*(D-1.)
+        block_coef = 1./(np.ceil(D / d)*d-1.)
+    else:
+        num_non_zero_pairs = np.floor(D / d)*d*(d-1) + (D % d) * (D % d - 1)
+        block_coef = 1./(d-1.)
 
     var_term = var_rademacher_real(X, p, D)
     cov_term = (num_non_zero_pairs / D**2) * \
-        ((dot_product_squared - 1./(d-1.) * (norms_squared + dot_product_squared - 2. * squared_dot_product))**p - dot_product_squared**p)
+        ((dot_product_squared - block_coef * (norms_squared + dot_product_squared - 2. * squared_dot_product))**p - dot_product_squared**p)
 
     vars = var_term + cov_term
     zero_vars = (dot_product_squared == 1) & (squared_dot_product == 1) & (norms_squared == 1)
@@ -86,13 +92,11 @@ def var_tensor_srht_comp_real(X, p=1., D=1., full_cov=False):
 
     if full_cov:
         num_non_zero_pairs = D*(D-1.)
-    else:
-        num_non_zero_pairs = np.floor(D / d)*d*(d-1) + (D % d) * (D % d - 1)
-
-    if full_cov:
         block_coef = 1./(np.ceil(D / d)*d-1.)
     else:
+        num_non_zero_pairs = np.floor(D / d)*d*(d-1) + (D % d) * (D % d - 1)
         block_coef = 1./(d-1.)
+        
 
     var_term = var_rademacher_comp_real(X, p, D)
     cov_term = num_non_zero_pairs / D**2 * \
@@ -287,7 +291,7 @@ if __name__ == "__main__":
     # Variance test to verify variance formulas
     n = 2
     d = 8
-    D = 128
+    D = 64
     n_points = 5
     data = torch.rand(n_points, d)
     data = data / data.norm(dim=1, keepdim=True)
@@ -307,12 +311,12 @@ if __name__ == "__main__":
         var = 1.,
         ard = False,
         trainable_kernel=False,
-        projection_type='countsketch_scatter',
+        projection_type='rademacher',
         hierarchical=False,
-        complex_weights=True,
+        complex_weights=False,
         full_cov=False,
         convolute_ts=False,
-        blockwise=True
+        blockwise=False
     )
 
     app_kernel_values = []
@@ -324,7 +328,7 @@ if __name__ == "__main__":
     for _ in range(10):
         ts.resample()
         y = ts.forward(data)
-        y = torch.cat([y.real, y.imag], dim=1)
+        # y = torch.cat([y.real, y.imag], dim=1)
         approx_kernel = y @ y.t()
         app_kernel_values.append(approx_kernel)
 
