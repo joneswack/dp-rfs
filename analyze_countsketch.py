@@ -35,9 +35,9 @@ if __name__ == "__main__":
     fig, axs = plt.subplots(1, 4, figsize=(14,4))
 
     for idx, dataset in enumerate([
-        #('EEG', '../datasets/export/eeg/pytorch/eeg.pth'),
+        # ('EEG', '../datasets/export/eeg/pytorch/eeg.pth'),
         #('Adult', '../datasets/export/adult/pytorch/train_adult.pth'),
-        #('Drive', '../datasets/export/drive/pytorch/drive.pth'),
+        # ('Drive', '../datasets/export/drive/pytorch/drive.pth'),
         #('CIFAR10 Conv', '../datasets/export/cifar10/pytorch/train_cifar10_resnet34_final.pth'),
         ('MNIST', '../datasets/export/mnist/pytorch/train_mnist.pth'),
         # ('Fashion MNIST', '../datasets/export/fashion_mnist/pytorch/train_fashion_mnist.pth'),
@@ -71,9 +71,10 @@ if __name__ == "__main__":
         comp_srht_vars = []
 
         degree = 2
-        D = int(2.*train_data.shape[1])
+        # D = int(2.*train_data.shape[1])
+        D = 1024
         # block_sizes = [1, int(np.sqrt(D))] + list(range(128, D+1, 128))
-        block_sizes = [1024]
+        block_sizes = [1]
 
         for block_size in block_sizes:
             print('Block size', block_size)
@@ -107,10 +108,10 @@ if __name__ == "__main__":
 
                 tic = time.time()
                 ts.resample()
-                print('Resampling time', time.time() - tic)
+                #print('Resampling time', time.time() - tic)
                 tic = time.time()
                 y = ts.forward(train_data)
-                print('Forward time', time.time() - tic)
+                #print('Forward time', time.time() - tic)
                 # y = torch.cat([y.real, y.imag], dim=1)
                 approx_kernel = y @ y.t()
                 # approx_kernel *= squared_prefactor.sqrt() * np.sqrt(squared_maclaurin_coefs[degree-1])

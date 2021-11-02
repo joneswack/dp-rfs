@@ -209,8 +209,8 @@ class PolynomialSketch(torch.nn.Module):
                         current_output = torch.fft.fft(current_output, n=self.d_features)
                     else:
                         current_output = torch.fft.rfft(current_output, n=self.d_features)
-                else:
-                    current_output = current_output * np.sqrt(self.d_features)
+                # else:
+                #     current_output = current_output * np.sqrt(self.d_features)
             
             if i == 0:
                 output = current_output
