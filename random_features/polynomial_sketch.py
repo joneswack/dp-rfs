@@ -122,7 +122,7 @@ class PolynomialSketch(torch.nn.Module):
 
     def __init__(self, d_in, d_features, degree=2, bias=0, lengthscale='auto', var=1.0, ard=False, trainable_kernel=False,
                     dtype=torch.FloatTensor, projection_type='countsketch_sparse', hierarchical=False, complex_weights=False,
-                    full_complex=False, full_cov=False, convolute_ts=True, blockwise=False):
+                    full_complex=False, full_cov=False, convolute_ts=True, block_size=None):
         """
         d_in: Data input dimension
         d_features: Projection dimension
@@ -170,7 +170,7 @@ class PolynomialSketch(torch.nn.Module):
             projection = lambda d_in, d_out: GaussianTransform(d_in, d_out, complex_weights=complex_weights)
         elif projection_type.split('_')[0] == 'countsketch':
             projection = lambda d_in, d_out: CountSketch(d_in, d_out, sketch_type=projection_type.split('_')[1],
-                complex_weights=complex_weights, full_complex=full_complex, blockwise=blockwise)
+                complex_weights=complex_weights, full_complex=full_complex, block_size=block_size)
 
         # the number of leaf nodes is p
         if self.hierarchical:

@@ -2,6 +2,7 @@ from numpy.core.shape_base import block
 import torch
 import numpy as np
 import math
+import time
 
 #from torch._C import dtype, float32
 
@@ -27,7 +28,7 @@ def generate_rademacher_samples(shape, complex_weights=False):
 class CountSketch(torch.nn.Module):
     """ Computes the CountSketch Cx that can take advantage of data sparsity. """
 
-    def __init__(self, d_in, d_features, sketch_type='sparse', complex_weights=False, full_complex=False, blockwise=False):
+    def __init__(self, d_in, d_features, sketch_type='sparse', complex_weights=False, full_complex=False, block_size=None):
         """
         d_in: Data input dimension
         d_features: Projection dimension
@@ -42,7 +43,13 @@ class CountSketch(torch.nn.Module):
         self.sketch_type = sketch_type
         self.complex_weights = complex_weights
         self.full_complex = full_complex
-        self.num_blocks = math.ceil(self.d_features / self.d_in)*30 if blockwise else 1
+
+        self.block_size = d_features if not block_size else block_size
+        self.num_blocks = math.ceil(d_features / self.block_size)
+        self.block_sizes = [
+            self.block_size if i < (self.num_blocks-1) else (d_features - (self.num_blocks-1)*self.block_size)
+            for i in range(self.num_blocks)
+        ]
 
         self.i_hash = torch.nn.ParameterList(
             [torch.nn.Parameter(None, requires_grad=False) for _ in range(self.num_blocks)]
@@ -52,39 +59,114 @@ class CountSketch(torch.nn.Module):
             [torch.nn.Parameter(None, requires_grad=False) for _ in range(self.num_blocks)]
         )
 
-        if sketch_type == 'sparse' or sketch_type == 'dense':
-            p_tensor = torch.zeros(self.d_features, self.d_in).to_sparse()
-        else:
-            p_tensor = None
-        self.P = torch.nn.Parameter(p_tensor, requires_grad=False)
+        self.P = torch.nn.Parameter(torch.zeros(self.d_features, self.d_in), requires_grad=False)
+        if sketch_type == 'sparse':
+            self.P_sparse = torch.nn.Parameter(torch.zeros(self.d_features, self.d_in).to_sparse(), requires_grad=False)
 
         # self.i_hash = torch.nn.Parameter(None, requires_grad=False)
         # self.s_hash = torch.nn.Parameter(None, requires_grad=False)
         # self.P = torch.nn.Parameter(None, requires_grad=False)
 
     def resample(self):
-        for hash in self.i_hash:
-            # self.i_hash.data = torch.randint(low=0, high=self.d_features, size=(self.d_in,))
-            hash.data = torch.randint(low=0, high=self.d_features, size=(self.d_in,))
-            if self.complex_weights:
-                # self.i_hash.data = self.i_hash.data + 1j*torch.randint(low=0, high=self.d_features, size=(self.d_in,))
-                hash.data = hash.data + 1j*torch.randint(low=0, high=self.d_features, size=(self.d_in,))
-        # self.s_hash.data = generate_rademacher_samples((self.d_in,), complex_weights=self.complex_weights)
-        for hash in self.s_hash:
-            hash.data = generate_rademacher_samples((self.d_in,), complex_weights=self.complex_weights)
+        with torch.no_grad():
+            # tic = time.time()
 
-        # TODO: adapt sparse and dense sketch to parameter list
+            # bs = torch.tensor([1,2,3])
+            # row = torch.tensor([1,2,3])
+            # col = torch.tensor([1,2,3])
 
-        if self.sketch_type == 'sparse' or self.sketch_type == 'dense':
-            # if we use sparse or dense sketch_type, the matrices can be precomputed
-            row = self.i_hash[0]
-            col = torch.arange(self.d_in)
-            values = self.s_hash[0]
-            indices = torch.stack([row, col], dim=0)
+            # indices = torch.stack([bs, row, col], dim=0)
 
-            self.P.data = torch.sparse.FloatTensor(indices, values, torch.Size([self.d_features, self.d_in]))
-            if self.sketch_type == 'dense':
-                self.P.data = self.P.data.to_dense()
+            # torch.sparse.FloatTensor(indices, torch.ones(3), torch.Size((4, 4, 4))).to_dense()
+
+            # works!!
+
+            if self.num_blocks > 1:
+                # perm = torch.rand(self.num_blocks-1, self.block_size, self.d_in)
+                # perm = perm.argsort(dim=1)
+
+                # C = torch.zeros(self.num_blocks-1, self.block_size, self.d_in)
+                # C[:, 0, :] = generate_rademacher_samples((self.num_blocks-1, self.d_in), complex_weights=self.complex_weights)
+                # C = C.gather(1, perm)
+
+                # self.P.data[:(self.num_blocks-1)*self.block_size] = C.reshape(-1, self.d_in)
+
+                # alternative create (num_blocks, block_size) sparse tensor
+                # seems to be fast for larger blocks
+                self.i_hash.data = torch.randint(low=0, high=self.block_size, size=(self.num_blocks-1, self.d_in))
+                self.s_hash.data = generate_rademacher_samples((self.num_blocks-1, self.d_in), complex_weights=self.complex_weights)
+                # block_dim
+                bs = torch.stack(self.d_in * [torch.arange(self.num_blocks-1)], dim=0).t().reshape(-1)
+                row = self.i_hash.data.reshape(-1)
+                col = torch.arange(self.d_in).repeat(self.num_blocks-1)
+                values = self.s_hash.data.reshape(-1)
+                indices = torch.stack([bs, row, col], dim=0)
+                C = torch.sparse.FloatTensor(indices, values, torch.Size([self.num_blocks-1, self.block_size, self.d_in])).to_dense()
+
+                self.P.data[:(self.num_blocks-1)*self.block_size] = C.reshape(-1, self.d_in)
+
+
+            # last_perm = torch.rand(1, self.block_sizes[-1], self.d_in)
+            # last_perm = last_perm.argsort(dim=1)
+
+            #print('Perm creation time', time.time() - tic)
+
+            # tic = time.time()
+
+            # C_last = torch.zeros(1, self.block_sizes[-1], self.d_in)
+            # C_last[0, 0, :] = generate_rademacher_samples((1, self.d_in,), complex_weights=self.complex_weights)
+            # C_last = C_last.gather(1, last_perm)
+
+            #print('Gather time', time.time() - tic)
+
+            # self.P.data[(self.num_blocks-1)*self.block_size:] = C_last[0]
+            
+            # for i in range(self.num_blocks):
+            #     # the permutation generation is too slow
+            #     # perm = torch.vstack([torch.randperm(self.block_sizes[i]) for _ in range(self.d_in)]).t()
+            #     # C = torch.zeros(self.block_sizes[i], self.d_in)
+            #     start_index = i*self.block_size
+            #     end_index = i*self.block_size+self.block_sizes[i]
+
+            #     C[start_index] = generate_rademacher_samples((self.d_in,), complex_weights=self.complex_weights)
+            #     # C[0] = generate_rademacher_samples((self.d_in,), complex_weights=self.complex_weights)
+
+            #     if i == self.num_blocks-1:
+            #         # last block
+            #         C[start_index:end_index] = C[start_index:end_index].gather(0, last_perm)
+            #     else:
+            #         C[start_index:end_index] = C[start_index:end_index].gather(0, perm[i])
+                
+            #     self.P.data[start_index:end_index] = C[start_index:end_index]
+
+            # for i in range(self.num_blocks):
+            #     # self.i_hash.data = torch.randint(low=0, high=self.d_features, size=(self.d_in,))
+            #     self.i_hash[i].data = torch.randint(low=0, high=self.block_sizes[i], size=(self.d_in,))
+            #     self.P.data[i*self.block_size:i*self.block_size+self.block_sizes[i]] = 
+
+            #     # this implementation is faster than x[:, self.permutations]
+            #     x = x.gather(1, self.permutations[:, None].expand(*x.shape))
+
+            #     if self.complex_weights:
+            #         # self.i_hash.data = self.i_hash.data + 1j*torch.randint(low=0, high=self.d_features, size=(self.d_in,))
+            #         self.i_hash[i].data = self.i_hash[i].data + 1j*torch.randint(low=0, high=self.block_sizes[i], size=(self.d_in,))
+
+            #     self.s_hash[i].data = generate_rademacher_samples((self.d_in,), complex_weights=self.complex_weights)
+
+            #     # TODO: adapt sparse and dense sketch to parameter list
+            #     # create the countsketch matrix for subsketch i
+
+            #     if self.sketch_type == 'sparse' or self.sketch_type == 'dense':
+            #         # if we use sparse or dense sketch_type, the matrices can be precomputed
+            #         row = self.i_hash[i]
+            #         col = torch.arange(self.d_in)
+            #         values = self.s_hash[i]
+            #         indices = torch.stack([row, col], dim=0)
+            #         self.P.data[i*self.block_size:i*self.block_size+self.block_sizes[i]] = torch.sparse.FloatTensor(
+            #             indices, values, torch.Size([self.block_sizes[i], self.d_in])).to_dense()
+
+            if self.sketch_type == 'sparse':
+                self.P_sparse.data = self.P.data.to_sparse()
 
     def forward(self, x):
         # we convert x to a matrix
@@ -92,7 +174,7 @@ class CountSketch(torch.nn.Module):
         x = x.reshape([-1, x.shape[-1]])
         
         if self.sketch_type == 'sparse':
-            output = torch.sparse.mm(self.P, x.t()).t()
+            output = torch.sparse.mm(self.P_sparse, x.t()).t()
         elif self.sketch_type == 'dense':
             output = torch.mm(x, self.P.t())
         else:
@@ -105,8 +187,10 @@ class CountSketch(torch.nn.Module):
             if x.is_cuda:
                 output = output.cuda()
 
-            for i in range(len(self.s_hash)):
+            for i in range(self.num_blocks):
                 y = x * self.s_hash[i]
+                start_index = i * self.block_size
+                end_index = (i+1) * self.block_size
 
                 if self.sketch_type == 'scatter':
                     # for scatter_add_ x and h need to have the same shape
@@ -116,21 +200,21 @@ class CountSketch(torch.nn.Module):
                     if self.complex_weights:
                         if self.full_complex:
                             # we use different hashes
-                            output[..., 0].scatter_add_(dim=-1, index=self.i_hash[i].real.expand(*y.shape).type(torch.int64), src=y.real)
-                            output[..., 1].scatter_add_(dim=-1, index=self.i_hash[i].imag.expand(*y.shape).type(torch.int64), src=y.imag)
+                            output[:, start_index:end_index, 0].scatter_add_(dim=-1, index=self.i_hash[i].real.expand(*y.shape).type(torch.int64), src=y.real)
+                            output[:, start_index:end_index, 1].scatter_add_(dim=-1, index=self.i_hash[i].imag.expand(*y.shape).type(torch.int64), src=y.imag)
                         else:
                             # we use the same hash twice
-                            output[..., 0].scatter_add_(dim=-1, index=self.i_hash[i].real.expand(*y.shape).type(torch.int64), src=y.real)
-                            output[..., 1].scatter_add_(dim=-1, index=self.i_hash[i].real.expand(*y.shape).type(torch.int64), src=y.imag)
+                            output[:, start_index:end_index, 0].scatter_add_(dim=-1, index=self.i_hash[i].real.expand(*y.shape).type(torch.int64), src=y.real)
+                            output[:, start_index:end_index, 1].scatter_add_(dim=-1, index=self.i_hash[i].real.expand(*y.shape).type(torch.int64), src=y.imag)
                     else:
-                        output.scatter_add_(dim=-1, index=self.i_hash[i].expand(*y.shape), src=y)
+                        output[:, start_index:end_index].scatter_add_(dim=-1, index=self.i_hash[i].expand(*y.shape), src=y)
                 else:
-                    output.index_add_(dim=-1, index=self.i_hash, source=x)
+                    output[:, start_index:end_index].index_add_(dim=-1, index=self.i_hash[i], source=y)
 
             if self.complex_weights:
                 output = torch.view_as_complex(output)
 
-        return output.reshape(original_shape) / np.sqrt(self.num_blocks) # self.num_blocks #  #  # 
+        return output.reshape(original_shape) / np.sqrt(self.num_blocks)
 
 
 class SRHT(torch.nn.Module):
