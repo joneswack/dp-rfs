@@ -6,11 +6,11 @@ import time
 
 #from torch._C import dtype, float32
 
-# if int(torch.__version__.split('.')[1]) > 1:
-#     # if number after first dot is larger than 1, use the new library
-#     from util.fwht.fwht import FastWalshHadamardTransform
-# else:
-#     from util.fwht_old.fwht import FastWalshHadamardTransform
+if int(torch.__version__.split('.')[1]) > 1:
+    # if number after first dot is larger than 1, use the new library
+    from util.fwht.fwht import FastWalshHadamardTransform
+else:
+    from util.fwht_old.fwht import FastWalshHadamardTransform
 
 
 def generate_rademacher_samples(shape, complex_weights=False):

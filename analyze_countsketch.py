@@ -72,13 +72,14 @@ if __name__ == "__main__":
 
         degree = 5
         #D = int(2.*train_data.shape[1])
-        D = 128
+        D = 2048
         # block_sizes = [1, int(np.sqrt(D))] + list(range(128, D+1, 128))
         #block_sizes = [int(np.sqrt(D))]
         # block_sizes = [4, 8, 12]
-        block_sizes = [1, D//2, D] # ,2,3,4,5, int(np.sqrt(D)), D//2, D, 3*D//4, D
+        block_sizes = [1] # ,2,3,4,5, int(np.sqrt(D)), D//2, D, 3*D//4, D
+        degrees = [1,2,3,4,5]
 
-        for block_size in block_sizes:
+        for degree in degrees:
             print('Degree', degree)
             # simulated TensorSketch
             ref_kernel = (train_data @ train_data.t()).pow(degree)
@@ -92,12 +93,12 @@ if __name__ == "__main__":
                 var = 1.,
                 ard = False,
                 trainable_kernel=False,
-                projection_type='osnap_dense',
+                projection_type='srht',
                 hierarchical=False,
                 complex_weights=False,
                 full_cov=False,
-                convolute_ts=False,
-                block_size=block_size
+                convolute_ts=True,
+                block_size=0
             )
 
             squared_errors = torch.zeros_like(ref_kernel)
@@ -129,7 +130,7 @@ if __name__ == "__main__":
 
             # degree_var = var_gaussian_comp_real(train_data, p=degree, D=D//2.)
 
-            degree_var = var_rademacher_real(train_data, p=degree, D=D)
+            # degree_var = var_rademacher_real(train_data, p=degree, D=D)
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # rad_vars.append(degree_var.view(-1).numpy().mean())
 
@@ -141,7 +142,7 @@ if __name__ == "__main__":
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # srht_vars.append(degree_var.view(-1).numpy().mean())
 
-            # degree_var, _ = var_tensor_srht_comp_real(train_data, p=degree, D=D, full_cov=False)
+            degree_var, _ = var_tensor_srht_comp_real(train_data, p=degree, D=D//2, full_cov=False)
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # comp_srht_vars.append(degree_var.view(-1).numpy().mean())
 
@@ -149,7 +150,7 @@ if __name__ == "__main__":
             differences = differences[~(differences.isnan() | differences.isinf())]
             differences = differences.view(-1).sort(descending=False)[0]
             n = np.arange(1,len(differences)+1) / np.float(len(differences))
-            axs[idx].step(differences, n, label='BS={} (Frob. Ratio: {:.2f})'.format(block_size, squared_errors.sum().abs().sqrt() / degree_var.sum().abs().sqrt()))
+            axs[idx].step(differences, n, label='Degree={} (Frob. Ratio: {:.2f})'.format(degree, squared_errors.sum().abs().sqrt() / degree_var.sum().abs().sqrt()))
 
             ## TODO: Change to ECDF plot instead of mean variance?
 
