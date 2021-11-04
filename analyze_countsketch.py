@@ -7,7 +7,7 @@ import time
 
 from scipy.special import factorial
 
-from verify_variances import var_gaussian_real, var_rademacher_comp_real, var_rademacher_real, var_tensor_srht_comp_real, var_tensor_srht_real
+from verify_variances import var_gaussian_comp_real, var_gaussian_real, var_rademacher_comp_real, var_rademacher_real, var_tensor_srht_comp_real, var_tensor_srht_real
 from random_features.polynomial_sketch import PolynomialSketch
 
 mc_samples = 100
@@ -35,9 +35,9 @@ if __name__ == "__main__":
     fig, axs = plt.subplots(1, 4, figsize=(14,4))
 
     for idx, dataset in enumerate([
-        # ('EEG', '../datasets/export/eeg/pytorch/eeg.pth'),
+        #('EEG', '../datasets/export/eeg/pytorch/eeg.pth'),
         #('Adult', '../datasets/export/adult/pytorch/train_adult.pth'),
-        # ('Drive', '../datasets/export/drive/pytorch/drive.pth'),
+        #('Drive', '../datasets/export/drive/pytorch/drive.pth'),
         #('CIFAR10 Conv', '../datasets/export/cifar10/pytorch/train_cifar10_resnet34_final.pth'),
         ('MNIST', '../datasets/export/mnist/pytorch/train_mnist.pth'),
         # ('Fashion MNIST', '../datasets/export/fashion_mnist/pytorch/train_fashion_mnist.pth'),
@@ -48,8 +48,8 @@ if __name__ == "__main__":
 
         train_data = train_data.reshape(len(train_data), -1)
 
-        torch.manual_seed(42)
-        np.random.seed(42)
+        torch.manual_seed(43)
+        np.random.seed(43)
 
         indices = torch.randint(len(train_data), (1000,))
         train_data = train_data[indices].double()
@@ -70,14 +70,16 @@ if __name__ == "__main__":
         srht_vars = []
         comp_srht_vars = []
 
-        degree = 2
-        # D = int(2.*train_data.shape[1])
-        D = 1024
+        degree = 5
+        #D = int(2.*train_data.shape[1])
+        D = 128
         # block_sizes = [1, int(np.sqrt(D))] + list(range(128, D+1, 128))
-        block_sizes = [1]
+        #block_sizes = [int(np.sqrt(D))]
+        # block_sizes = [4, 8, 12]
+        block_sizes = [1, D//2, D] # ,2,3,4,5, int(np.sqrt(D)), D//2, D, 3*D//4, D
 
         for block_size in block_sizes:
-            print('Block size', block_size)
+            print('Degree', degree)
             # simulated TensorSketch
             ref_kernel = (train_data @ train_data.t()).pow(degree)
 
@@ -90,7 +92,7 @@ if __name__ == "__main__":
                 var = 1.,
                 ard = False,
                 trainable_kernel=False,
-                projection_type='countsketch_dense',
+                projection_type='osnap_dense',
                 hierarchical=False,
                 complex_weights=False,
                 full_cov=False,
@@ -101,17 +103,17 @@ if __name__ == "__main__":
             squared_errors = torch.zeros_like(ref_kernel)
             
             for i in range(mc_samples):
-                if i % 100 == 0:
+                if i % 1 == 0:
                     print('Sample {} / {}'.format(i+1, mc_samples))
                 torch.manual_seed(i)
                 np.random.seed(i)
 
                 tic = time.time()
                 ts.resample()
-                #print('Resampling time', time.time() - tic)
+                # print('Resampling time', time.time() - tic)
                 tic = time.time()
                 y = ts.forward(train_data)
-                #print('Forward time', time.time() - tic)
+                # print('Forward time', time.time() - tic)
                 # y = torch.cat([y.real, y.imag], dim=1)
                 approx_kernel = y @ y.t()
                 # approx_kernel *= squared_prefactor.sqrt() * np.sqrt(squared_maclaurin_coefs[degree-1])
@@ -125,6 +127,8 @@ if __name__ == "__main__":
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # gaussian_vars.append(degree_var.view(-1).numpy().mean())
 
+            # degree_var = var_gaussian_comp_real(train_data, p=degree, D=D//2.)
+
             degree_var = var_rademacher_real(train_data, p=degree, D=D)
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # rad_vars.append(degree_var.view(-1).numpy().mean())
@@ -133,11 +137,11 @@ if __name__ == "__main__":
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # comp_rad_vars.append(degree_var.view(-1).numpy().mean())
 
-            # degree_var, _ = var_tensor_srht_real(train_data, p=degree, D=D, full_cov=True)
+            # degree_var, _ = var_tensor_srht_real(train_data, p=degree, D=D, full_cov=False)
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # srht_vars.append(degree_var.view(-1).numpy().mean())
 
-            # degree_var, _ = var_tensor_srht_comp_real(train_data, p=degree, D=D//2., full_cov=False)
+            # degree_var, _ = var_tensor_srht_comp_real(train_data, p=degree, D=D, full_cov=False)
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # comp_srht_vars.append(degree_var.view(-1).numpy().mean())
 

@@ -4,7 +4,7 @@ import numpy as np
 import sys, os
 sys.path.append(os.path.join(os.path.dirname(__file__), "../"))
 
-from random_features.projections import CountSketch, SRHT, RademacherTransform, GaussianTransform
+from random_features.projections import CountSketch, OSNAP, SRHT, RademacherTransform, GaussianTransform
 
 
 class SketchNode:
@@ -171,6 +171,9 @@ class PolynomialSketch(torch.nn.Module):
         elif projection_type.split('_')[0] == 'countsketch':
             projection = lambda d_in, d_out: CountSketch(d_in, d_out, sketch_type=projection_type.split('_')[1],
                 complex_weights=complex_weights, full_complex=full_complex, block_size=block_size)
+        elif projection_type.split('_')[0] == 'osnap':
+            projection = lambda d_in, d_out: OSNAP(d_in, d_out, s=block_size, sketch_type=projection_type.split('_')[1],
+                complex_weights=complex_weights, full_complex=full_complex)
 
         # the number of leaf nodes is p
         if self.hierarchical:
@@ -203,25 +206,30 @@ class PolynomialSketch(torch.nn.Module):
         for i, ls in enumerate(self.sketch_list):
             current_output = ls.forward(x)
 
-            if isinstance(ls, CountSketch):
-                if self.convolute_ts:
-                    if self.complex_weights:
-                        current_output = torch.fft.fft(current_output, n=self.d_features)
-                    else:
-                        current_output = torch.fft.rfft(current_output, n=self.d_features)
-                # else:
-                #     current_output = current_output * np.sqrt(self.d_features)
+            if self.convolute_ts:
+                if self.complex_weights:
+                    current_output = torch.fft.fft(current_output, n=self.d_features)
+                else:
+                    current_output = torch.fft.rfft(current_output, n=self.d_features)
+
+                if (not isinstance(ls, CountSketch)) and (not isinstance(ls, OSNAP)):
+                    # we need to scale down the sketch
+                    current_output = current_output / np.sqrt(self.d_features)
+            elif isinstance(ls, OSNAP) or isinstance(ls, CountSketch):
+                # OSNAP and CountSketch without convolution require upscaling
+                current_output = current_output * np.sqrt(self.d_features)
             
             if i == 0:
                 output = current_output
             else:
                 output = output * current_output
 
-        if isinstance(ls, CountSketch) and self.convolute_ts:
+        if self.convolute_ts:
             if self.complex_weights:
                 output = torch.fft.ifft(output, n=self.d_features)
             else:
                 output = torch.fft.irfft(output, n=self.d_features)
+
         else:
             output = output / np.sqrt(self.d_features)
         
