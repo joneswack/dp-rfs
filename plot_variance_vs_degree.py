@@ -36,10 +36,10 @@ if __name__ == "__main__":
     fig, axs = plt.subplots(1, 4, figsize=(14,4))
 
     for idx, dataset in enumerate([
-        ('EEG', '../datasets/export/eeg/pytorch/eeg.pth'),
+        # ('EEG', '../datasets/export/eeg/pytorch/eeg.pth'),
         #('Adult', '../datasets/export/adult/pytorch/train_adult.pth'),
-        ('Drive', '../datasets/export/drive/pytorch/drive.pth'),
-        ('CIFAR10 Conv', '../datasets/export/cifar10/pytorch/train_cifar10_resnet34_final.pth'),
+        #('Drive', '../datasets/export/drive/pytorch/drive.pth'),
+        #('CIFAR10 Conv', '../datasets/export/cifar10/pytorch/train_cifar10_resnet34_final.pth'),
         ('MNIST', '../datasets/export/mnist/pytorch/train_mnist.pth'),
         # ('Fashion MNIST', '../datasets/export/fashion_mnist/pytorch/train_fashion_mnist.pth'),
         # ('Gisette', '../datasets/export/gisette/pytorch/train_gisette.pth')
@@ -58,11 +58,13 @@ if __name__ == "__main__":
         train_data = train_data[indices].double()
 
         # lengthscale = torch.cdist(train_data, train_data, p=2.).median()
+        lengthscale = np.sqrt(train_data.shape[1])
+        bias = 1.
         # train_data = train_data / lengthscale
 
         squared_prefactor_train = torch.exp(-train_data.pow(2).sum(dim=1))
 
-        train_data = train_data / train_data.norm(dim=1, keepdim=True)
+        # train_data = train_data / train_data.norm(dim=1, keepdim=True)
 
         power_2_pad = int(2**np.ceil(np.log2(train_data.shape[1])))
 
@@ -78,54 +80,54 @@ if __name__ == "__main__":
         srht_vars = []
         comp_srht_vars = []
 
-        # degrees = list(range(1, 11, 1))
-        degrees = [1, 2, 3]
+        degrees = list(range(1, 11, 1))
+        # degrees = [1, 2, 3]
 
         squared_prefactor = squared_prefactor_train.unsqueeze(1) * squared_prefactor_train.unsqueeze(0)
         squared_maclaurin_coefs = gaussian_kernel_coefs(np.array(degrees))**2
 
-        # D = int(2.*train_data.shape[1])
+        D = int(2.*train_data.shape[1])
 
         for degree in degrees:
-            D = train_data.shape[1]**degree
+            # D = train_data.shape[1]**degree
             print('Degree', degree)
             # simulated TensorSketch
             ref_kernel = (train_data @ train_data.t()).pow(degree)
             # ref_kernel *= squared_prefactor.sqrt() * np.sqrt(squared_maclaurin_coefs[degree-1])
 
-            # ts = PolynomialSketch(
-            #     d_in=train_data.shape[1],
-            #     d_features=int(D),
-            #     degree=degree,
-            #     bias=0,
-            #     lengthscale=1.,
-            #     var = 1.,
-            #     ard = False,
-            #     trainable_kernel=False,
-            #     projection_type='countsketch_sparse',
-            #     hierarchical=False,
-            #     complex_weights=False,
-            #     full_cov=False,
-            #     convolute_ts=True,
-            #     blockwise=False
-            # )
+            ts = PolynomialSketch(
+                d_in=train_data.shape[1],
+                d_features=int(D),
+                degree=degree,
+                bias=0,
+                lengthscale=1.,
+                var = 1.,
+                ard = False,
+                trainable_kernel=False,
+                projection_type='countsketch_sparse',
+                hierarchical=False,
+                complex_weights=False,
+                full_cov=False,
+                convolute_ts=True,
+                block_size=None
+            )
 
-            # squared_errors = torch.zeros_like(ref_kernel)
+            squared_errors = torch.zeros_like(ref_kernel)
             
-            # for i in range(mc_samples):
-            #     if i % 100 == 0:
-            #         print('Sample {} / {}'.format(i+1, mc_samples))
-            #     torch.manual_seed(i)
-            #     np.random.seed(i)
+            for i in range(mc_samples):
+                if i % 100 == 0:
+                    print('Sample {} / {}'.format(i+1, mc_samples))
+                torch.manual_seed(i)
+                np.random.seed(i)
 
-            #     ts.resample()
-            #     y = ts.forward(train_data)
-            #     # y = torch.cat([y.real, y.imag], dim=1)
-            #     approx_kernel = y @ y.t()
-            #     # approx_kernel *= squared_prefactor.sqrt() * np.sqrt(squared_maclaurin_coefs[degree-1])
-            #     squared_errors += (approx_kernel - ref_kernel).pow(2)
+                ts.resample()
+                y = ts.forward(train_data)
+                # y = torch.cat([y.real, y.imag], dim=1)
+                approx_kernel = y @ y.t()
+                # approx_kernel *= squared_prefactor.sqrt() * np.sqrt(squared_maclaurin_coefs[degree-1])
+                squared_errors += (approx_kernel - ref_kernel).pow(2)
 
-            # squared_errors /= mc_samples
+            squared_errors /= mc_samples
 
             # ts_vars.append(squared_errors.mean())
 
@@ -133,7 +135,7 @@ if __name__ == "__main__":
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # gaussian_vars.append(degree_var.view(-1).numpy().mean())
 
-            squared_errors = var_rademacher_real(train_data, p=degree, D=D) # degree_var
+            # degree_var = var_rademacher_real(train_data, p=degree, D=D) # degree_var
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # rad_vars.append(degree_var.view(-1).numpy().mean())
 
@@ -141,11 +143,11 @@ if __name__ == "__main__":
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # comp_rad_vars.append(degree_var.view(-1).numpy().mean())
 
-            degree_var, _ = var_tensor_srht_real(train_data, p=degree, D=D, full_cov=False)
+            # degree_var, _ = var_tensor_srht_real(train_data, p=degree, D=D, full_cov=False)
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # srht_vars.append(degree_var.view(-1).numpy().mean())
 
-            # degree_var, _ = var_tensor_srht_comp_real(train_data, p=degree, D=D//2., full_cov=False)
+            degree_var, _ = var_tensor_srht_comp_real(train_data, p=degree, D=D//2., full_cov=False)
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # comp_srht_vars.append(degree_var.view(-1).numpy().mean())
 

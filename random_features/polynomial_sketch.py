@@ -96,9 +96,9 @@ def construct_sketch_tree(projection, degree, d_in, d_features, srht=False):
 
     # start with the leafs        
     current_layer = [SketchNode(None, None, projection(d_in, proj_dim),
-                d_features, sup_leaf=False) for i in range(degree)]
+                d_features, sup_leaf=False) for _ in range(degree)]
     current_layer += [SketchNode(None, None, projection(d_in, proj_dim),
-                d_features, sup_leaf=True) for i in range(q - degree)]
+                d_features, sup_leaf=True) for _ in range(q - degree)]
 
     # and go up layer by layer
     for _ in range(int(np.log2(q))):
@@ -121,8 +121,8 @@ class PolynomialSketch(torch.nn.Module):
     """
 
     def __init__(self, d_in, d_features, degree=2, bias=0, lengthscale='auto', var=1.0, ard=False, trainable_kernel=False,
-                    dtype=torch.FloatTensor, projection_type='countsketch_sparse', hierarchical=False, complex_weights=False,
-                    full_complex=False, full_cov=False, convolute_ts=True, block_size=None):
+                    device='cpu', projection_type='countsketch_sparse', hierarchical=False, complex_weights=False,
+                    complex_real=False, full_complex=False, full_cov=False, convolute_ts=False, block_size=None):
         """
         d_in: Data input dimension
         d_features: Projection dimension
@@ -138,19 +138,22 @@ class PolynomialSketch(torch.nn.Module):
         """
         super(PolynomialSketch, self).__init__()
         self.d_in = d_in
+        if complex_real:
+            d_features = d_features // 2
         self.d_features = d_features
         self.degree = degree
-        self.dtype = dtype
+        self.device = device
         self.projection_type = projection_type
         self.hierarchical = hierarchical
-        self.complex_weights = complex_weights
+        self.complex_weights = (complex_weights or complex_real)
         self.full_complex = full_complex
         self.convolute_ts = convolute_ts
+        self.complex_real = complex_real
 
         # we initialize the kernel hyperparameters
         self.log_bias = None
         if bias != 0:
-            self.log_bias = torch.nn.Parameter(torch.ones(1).type(dtype) * np.log(bias), requires_grad=trainable_kernel)
+            self.log_bias = torch.nn.Parameter(torch.ones(1, device=device).float() * np.log(bias), requires_grad=trainable_kernel)
             self.d_in = self.d_in + 1
         
         if isinstance(lengthscale, str) and lengthscale == 'auto':
@@ -159,28 +162,28 @@ class PolynomialSketch(torch.nn.Module):
             lengthscale = np.sqrt(d_in)
 
         num_lengthscales = d_in if ard else 1
-        self.log_lengthscale = torch.nn.Parameter(torch.ones(num_lengthscales).type(dtype) * np.log(lengthscale), requires_grad=trainable_kernel)
-        self.log_var = torch.nn.Parameter(torch.ones(1).type(dtype) * np.log(var), requires_grad=trainable_kernel)
+        self.log_lengthscale = torch.nn.Parameter(torch.ones(num_lengthscales, device=device).float() * np.log(lengthscale), requires_grad=trainable_kernel)
+        self.log_var = torch.nn.Parameter(torch.ones(1, device=device).float() * np.log(var), requires_grad=trainable_kernel)
 
         if projection_type == 'srht':
-            projection = lambda d_in, d_out: SRHT(d_in, d_out, complex_weights=complex_weights, full_cov=full_cov)
+            projection = lambda d_in, d_out: SRHT(d_in, d_out, complex_weights=self.complex_weights, full_cov=full_cov, device=device)
         elif projection_type == 'rademacher':
-            projection = lambda d_in, d_out: RademacherTransform(d_in, d_out, complex_weights=complex_weights)
+            projection = lambda d_in, d_out: RademacherTransform(d_in, d_out, complex_weights=self.complex_weights, device=device)
         elif projection_type == 'gaussian':
-            projection = lambda d_in, d_out: GaussianTransform(d_in, d_out, complex_weights=complex_weights)
+            projection = lambda d_in, d_out: GaussianTransform(d_in, d_out, complex_weights=self.complex_weights, device=device)
         elif projection_type.split('_')[0] == 'countsketch':
             projection = lambda d_in, d_out: CountSketch(d_in, d_out, sketch_type=projection_type.split('_')[1],
-                complex_weights=complex_weights, full_complex=full_complex, block_size=block_size)
+                complex_weights=self.complex_weights, full_complex=full_complex, device=device)
         elif projection_type.split('_')[0] == 'osnap':
             projection = lambda d_in, d_out: OSNAP(d_in, d_out, s=block_size, sketch_type=projection_type.split('_')[1],
-                complex_weights=complex_weights, full_complex=full_complex)
+                complex_weights=self.complex_weights, full_complex=full_complex, device=device)
 
         # the number of leaf nodes is p
         if self.hierarchical:
             self.root = construct_sketch_tree(projection, degree, self.d_in, d_features, srht=(projection_type=='srht'))
         else:
             self.sketch_list = torch.nn.ModuleList(
-                [projection(self.d_in, self.d_features) for i in range(degree)]
+                [projection(self.d_in, self.d_features) for _ in range(degree)]
             )
 
     def resample(self):
@@ -255,6 +258,9 @@ class PolynomialSketch(torch.nn.Module):
             x = self.plain_forward(x)
 
         x = x * torch.exp(self.log_var / 2.)
+
+        if self.complex_real:
+            x = torch.cat([x.real, x.imag], dim=-1)
 
         return x
 
