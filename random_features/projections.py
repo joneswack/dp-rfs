@@ -242,10 +242,17 @@ class SRHT(torch.nn.Module):
 
         for i in range(self.k):
             x = x * self.rad[i]
+            # x = torch.view_as_real(x * self.rad[i])
+            # x = x.permute([-1] + [i for i in range(x.dim()-1)]) #.contiguous()
+            # x = torch.stack([x.real * self.rad[i].real, x.real * self.rad[i].imag], dim=0)
             
             if self.complex_weights:
                 x.real = FastWalshHadamardTransform.apply(x.real)
                 x.imag = FastWalshHadamardTransform.apply(x.imag)
+                # x = FastWalshHadamardTransform.apply(x)
+                # x = x.permute([i+1 for i in range(x.dim()-1)] + [0]) #.contiguous()
+                # x = torch.stack([x[0], x[1]], dim=-1)
+                # x = torch.view_as_complex(x)
             else:
                 x = FastWalshHadamardTransform.apply(x)
 
