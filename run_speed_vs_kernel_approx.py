@@ -14,10 +14,19 @@ repetitions = 100
 torch.manual_seed(0)
 
 # featuresdict_1 = {'2048': torch.load('saved_models/conv_features/cifar10-val-inc-v3-2048.pth')}
-featuresdict_2 = {'2048': torch.load('saved_models/conv_features/cifar10-train-inc-v3-2048.pth')}
+#featuresdict_2 = {'2048': torch.load('saved_models/conv_features/cifar10-train-inc-v3-2048.pth')}
 # input_data_1 = featuresdict_1['2048'][:, :-1].to(device)
-input_data = featuresdict_2['2048'][:, :-1].to(device)
-del featuresdict_2
+#input_data = featuresdict_2['2048'][:, :-1].to(device)
+#del featuresdict_2
+
+data = util.data.load_dataset('config/datasets/adult.json', standardize=False, maxmin=False, normalize=False, split_size=0.9)
+data_name, train_data, test_data, train_labels, test_labels = data
+# pad with zeros
+train_data = train_data / torch.max(train_data, 0)[0]
+input_data = torch.zeros(len(train_data), 127, dtype=train_data.dtype)
+input_data[:, :train_data.shape[1]] = train_data
+# we need min-max scaling
+d = 128
 
 # input_data_1 = torch.from_numpy(np.load('saved_models/lenet_test.npy'))[:, :-1].to(device)
 # input_data = torch.from_numpy(np.load('saved_models/conv_features/lenet_train.npy'))[:, :-1].to(device)
@@ -31,7 +40,8 @@ lengthscale = 1./input_data.shape[1]
 subsample_size = 1000
 # this data sample will be recomputed for every repetition later on
 input_data_sample = input_data[torch.randperm(len(input_data), device=device)[:subsample_size]]
-rf_dims = [64, 128, 256, 512, 1024, 2048, 2048*2, 2048*3, 2048*4, 2048*5, 2048*6]
+# rf_dims = [64, 128, 256, 512, 1024, 2048, 2048*2, 2048*3, 2048*4, 2048*5, 2048*6]
+rf_dims = [i*d for i in range(1, 11)]
 # rf_dims = [512]
 # rf_dims = [512*2]
 rf_configs = [
@@ -46,8 +56,8 @@ rf_configs = [
     {'proj': 'srht', 'full_cov': True, 'complex_real': True}
 ]
 
-log_handler = util.data.Log_Handler('time_benchmark', 'rep{}_p{}_bias{}_cifarinc'.format(repetitions, p, bias))
-csv_handler = util.data.DF_Handler('time_benchmark', 'rep{}_p{}_bias{}_cifarinc'.format(repetitions, p, bias))
+log_handler = util.data.Log_Handler('time_benchmark', 'rep{}_p{}_bias{}_adult'.format(repetitions, p, bias))
+csv_handler = util.data.DF_Handler('time_benchmark', 'rep{}_p{}_bias{}_adult'.format(repetitions, p, bias))
 
 def polynomial_kernel(X, Y, degree=3, gamma=None, coef0=1):
     if gamma is None:
