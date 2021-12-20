@@ -1,5 +1,6 @@
 import torch
 from random_features.polynomial_sketch import PolynomialSketch
+from random_features.fast_tensor_srht import FastTensorSRHT
 import util.data
 
 import numpy as np
@@ -19,29 +20,48 @@ torch.manual_seed(0)
 #input_data = featuresdict_2['2048'][:, :-1].to(device)
 #del featuresdict_2
 
-data = util.data.load_dataset('config/datasets/adult.json', standardize=False, maxmin=False, normalize=False, split_size=0.9)
+# data = util.data.load_dataset('config/datasets/adult.json', standardize=False, maxmin=False, normalize=False, split_size=0.9)
+# data_name, train_data, test_data, train_labels, test_labels = data
+# # pad with zeros
+# train_data = train_data / torch.max(train_data, 0)[0]
+# input_data = torch.zeros(len(train_data), 127, dtype=train_data.dtype)
+# input_data[:, :train_data.shape[1]] = train_data
+# # we need min-max scaling
+# d = 128
+
+data = util.data.load_dataset('config/datasets/mocap.json', standardize=False, maxmin=False, normalize=False, split_size=0.9)
 data_name, train_data, test_data, train_labels, test_labels = data
 # pad with zeros
-train_data = train_data / torch.max(train_data, 0)[0]
-input_data = torch.zeros(len(train_data), 127, dtype=train_data.dtype)
+# make data positive
+train_data = train_data - torch.min(train_data, 0)[0]
+# normalize data
+# train_data = train_data / torch.max(train_data, 0)[0]
+train_data = train_data / train_data.norm(dim=1, keepdim=True)
+input_data = torch.zeros(len(train_data), 1023, dtype=train_data.dtype)
 input_data[:, :train_data.shape[1]] = train_data
 # we need min-max scaling
-d = 128
+d = 64
 
 # input_data_1 = torch.from_numpy(np.load('saved_models/lenet_test.npy'))[:, :-1].to(device)
 # input_data = torch.from_numpy(np.load('saved_models/conv_features/lenet_train.npy'))[:, :-1].to(device)
+# d=512
+
+
 
 # polynomial kernel parameters
 p=3
 bias=1
-lengthscale = 1./input_data.shape[1]
+# ONLY IF NOT UNIT-NORMALIZED
+# lengthscale = np.sqrt(input_data.shape[1])
+# IF UNIT-NORMALIZED
+lengthscale = 1.
 
 # size of the random subset of the input data
 subsample_size = 1000
 # this data sample will be recomputed for every repetition later on
 input_data_sample = input_data[torch.randperm(len(input_data), device=device)[:subsample_size]]
 # rf_dims = [64, 128, 256, 512, 1024, 2048, 2048*2, 2048*3, 2048*4, 2048*5, 2048*6]
-rf_dims = [i*d for i in range(1, 11)]
+rf_dims = [i*d for i in range(1, 51)]
 # rf_dims = [512]
 # rf_dims = [512*2]
 rf_configs = [
@@ -56,8 +76,8 @@ rf_configs = [
     {'proj': 'srht', 'full_cov': True, 'complex_real': True}
 ]
 
-log_handler = util.data.Log_Handler('time_benchmark', 'rep{}_p{}_bias{}_adult'.format(repetitions, p, bias))
-csv_handler = util.data.DF_Handler('time_benchmark', 'rep{}_p{}_bias{}_adult'.format(repetitions, p, bias))
+log_handler = util.data.Log_Handler('time_benchmark', 'rep{}_p{}_bias{}_mocap'.format(repetitions, p, bias))
+csv_handler = util.data.DF_Handler('time_benchmark', 'rep{}_p{}_bias{}_mocap'.format(repetitions, p, bias))
 
 def polynomial_kernel(X, Y, degree=3, gamma=None, coef0=1):
     if gamma is None:
@@ -68,10 +88,14 @@ def polynomial_kernel(X, Y, degree=3, gamma=None, coef0=1):
 for config in rf_configs:
     for D in rf_dims:
         sketch = PolynomialSketch(
-            input_data.shape[1], D, degree=p, bias=bias, lengthscale=np.sqrt(input_data.shape[1]),
+            input_data.shape[1], D, degree=p, bias=bias, lengthscale=lengthscale,
             projection_type=config['proj'], full_cov=config['full_cov'], complex_real=config['complex_real'],
             convolute_ts=(config['proj'].startswith('countsketch')), device=device
         )
+        # sketch = FastTensorSRHT(
+        #     input_data.shape[1], D, p, bias=bias, lengthscale=lengthscale,
+        #     var=1, ard=False, complex_real=config['complex_real'], trainable_kernel=False, device=device
+        # )
 
         kernel_mse_errors = np.zeros(repetitions)
         kernel_frob_errors = np.zeros(repetitions)
@@ -105,7 +129,7 @@ for config in rf_configs:
                 sketch.resample()
                 y = sketch.forward(input_data_sample)
                 approx_kernel = y @ y.t()
-                exact_kernel = polynomial_kernel(input_data_sample, input_data_sample, degree=p, gamma=1./input_data.shape[1], coef0=bias)
+                exact_kernel = polynomial_kernel(input_data_sample, input_data_sample, degree=p, gamma=1./lengthscale**2, coef0=bias)
                 kernel_dif = exact_kernel - approx_kernel
                 kernel_mse_errors[i] = kernel_dif.pow(2).mean()
                 kernel_abs_errors[i] = kernel_dif.abs().mean()

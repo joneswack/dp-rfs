@@ -226,13 +226,16 @@ class SRHT(torch.nn.Module):
                 (self.k, 1, self.d_in), complex_weights=self.complex_weights, device=self.device)
             # generate an index permutation over B*d
             indices = torch.arange(self.d_in, device=self.device).repeat(self.num_blocks)
-            self.permutations.data = indices.gather(0, torch.randperm(len(indices), device=self.device))
+            self.permutations.data = indices.gather(
+                0, torch.randperm(len(indices), device=self.device)
+            )[:self.d_features]
         else:
             self.rad.data = generate_rademacher_samples(
                 (self.k, self.num_blocks, self.d_in), complex_weights=self.complex_weights, device=self.device)
             # generate an index permutation per block
             self.permutations.data = torch.cat(
-                [i*self.d_in + torch.randperm(self.d_in, device=self.device) for i in range(self.num_blocks)], dim=0)
+                [i*self.d_in + torch.randperm(self.d_in, device=self.device) for i in range(self.num_blocks)]
+            , dim=0)[:self.d_features]
     
     def forward(self, x):
         # number of independent projections
@@ -263,10 +266,9 @@ class SRHT(torch.nn.Module):
         x = x.view(-1, n_projections*self.d_in)
     
         if self.shuffle or self.full_cov:
-            x = x.gather(1, self.permutations[None, :].expand(len(x), self.num_blocks*self.d_in))
+            x = x.gather(1, self.permutations[None, :].expand(len(x), self.d_features))
 
-        # keep d_features and convert x back to old shape
-        return x[:, :self.d_features]
+        return x
 
 class RademacherTransform(torch.nn.Module):
     def __init__(self, d_in, d_features, complex_weights=False, device='cpu'):
