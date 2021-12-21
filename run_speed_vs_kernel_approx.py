@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from timeit import default_timer as timer
 from tqdm import tqdm
 
-device = 'cpu'
+device = 'cuda'
 repetitions = 100
 torch.manual_seed(0)
 
@@ -29,7 +29,20 @@ torch.manual_seed(0)
 # # we need min-max scaling
 # d = 128
 
-data = util.data.load_dataset('config/datasets/mocap.json', standardize=False, maxmin=False, normalize=False, split_size=0.9)
+# data = util.data.load_dataset('config/datasets/mocap.json', standardize=False, maxmin=False, normalize=False, split_size=0.9)
+# data_name, train_data, test_data, train_labels, test_labels = data
+# # pad with zeros
+# # make data positive
+# train_data = train_data - torch.min(train_data, 0)[0]
+# # normalize data
+# # train_data = train_data / torch.max(train_data, 0)[0]
+# train_data = train_data / train_data.norm(dim=1, keepdim=True)
+# input_data = torch.zeros(len(train_data), 1023, dtype=train_data.dtype, device=device)
+# input_data[:, :train_data.shape[1]] = train_data.to(device)
+# # we need min-max scaling
+# d = 64
+
+data = util.data.load_dataset('config/datasets/mnist.json', standardize=False, maxmin=False, normalize=False, split_size=0.9)
 data_name, train_data, test_data, train_labels, test_labels = data
 # pad with zeros
 # make data positive
@@ -39,8 +52,9 @@ train_data = train_data - torch.min(train_data, 0)[0]
 train_data = train_data / train_data.norm(dim=1, keepdim=True)
 input_data = torch.zeros(len(train_data), 1023, dtype=train_data.dtype)
 input_data[:, :train_data.shape[1]] = train_data
+input_data = input_data.to(device)
 # we need min-max scaling
-d = 64
+d = 1024
 
 # input_data_1 = torch.from_numpy(np.load('saved_models/lenet_test.npy'))[:, :-1].to(device)
 # input_data = torch.from_numpy(np.load('saved_models/conv_features/lenet_train.npy'))[:, :-1].to(device)
@@ -61,7 +75,7 @@ subsample_size = 1000
 # this data sample will be recomputed for every repetition later on
 input_data_sample = input_data[torch.randperm(len(input_data), device=device)[:subsample_size]]
 # rf_dims = [64, 128, 256, 512, 1024, 2048, 2048*2, 2048*3, 2048*4, 2048*5, 2048*6]
-rf_dims = [i*d for i in range(1, 51)]
+rf_dims = [i*d for i in range(1, 16)]
 # rf_dims = [512]
 # rf_dims = [512*2]
 rf_configs = [
@@ -76,8 +90,8 @@ rf_configs = [
     {'proj': 'srht', 'full_cov': True, 'complex_real': True}
 ]
 
-log_handler = util.data.Log_Handler('time_benchmark', 'rep{}_p{}_bias{}_mocap'.format(repetitions, p, bias))
-csv_handler = util.data.DF_Handler('time_benchmark', 'rep{}_p{}_bias{}_mocap'.format(repetitions, p, bias))
+log_handler = util.data.Log_Handler('time_benchmark', 'rep{}_p{}_bias{}_mnist'.format(repetitions, p, bias))
+csv_handler = util.data.DF_Handler('time_benchmark', 'rep{}_p{}_bias{}_mnist'.format(repetitions, p, bias))
 
 def polynomial_kernel(X, Y, degree=3, gamma=None, coef0=1):
     if gamma is None:
@@ -91,7 +105,7 @@ for config in rf_configs:
             input_data.shape[1], D, degree=p, bias=bias, lengthscale=lengthscale,
             projection_type=config['proj'], full_cov=config['full_cov'], complex_real=config['complex_real'],
             convolute_ts=(config['proj'].startswith('countsketch')), device=device
-        )
+        ).to(device)
         # sketch = FastTensorSRHT(
         #     input_data.shape[1], D, p, bias=bias, lengthscale=lengthscale,
         #     var=1, ard=False, complex_real=config['complex_real'], trainable_kernel=False, device=device
@@ -101,58 +115,59 @@ for config in rf_configs:
         kernel_frob_errors = np.zeros(repetitions)
         kernel_abs_errors = np.zeros(repetitions)
 
-        try:
-            # torch.cuda.empty_cache()
+        # try:
+        torch.cuda.empty_cache()
 
-            # Phase 1: Warm up
-            for _ in range(repetitions):
-                sketch.resample()
-                _ = sketch.forward(input_data_sample)
+        # Phase 1: Warm up
+        print(input_data_sample.device)
+        for _ in range(repetitions):
+            sketch.resample()
+            _ = sketch.forward(input_data_sample)
 
-            # Phase 2: RF time measurement
-            elapsed_time_ms = 0
+        # Phase 2: RF time measurement
+        elapsed_time_ms = 0
 
-            for _ in range(repetitions):
-                # we do not measure the resampling time now
-                sketch.resample()
+        for _ in range(repetitions):
+            # we do not measure the resampling time now
+            sketch.resample()
 
-                # torch.cuda.synchronize()
-                start = timer()
-                _ = sketch.forward(input_data_sample)
+            torch.cuda.synchronize()
+            start = timer()
+            _ = sketch.forward(input_data_sample)
 
-                # torch.cuda.synchronize()
-                elapsed_time_ms += (timer() - start) * 1000
+            torch.cuda.synchronize()
+            elapsed_time_ms += (timer() - start) * 1000
 
-            # Phase 3: Kernel estimation
-            for i in range(repetitions):
-                input_data_sample = input_data[torch.randperm(len(input_data), device=device)[:subsample_size]]
-                sketch.resample()
-                y = sketch.forward(input_data_sample)
-                approx_kernel = y @ y.t()
-                exact_kernel = polynomial_kernel(input_data_sample, input_data_sample, degree=p, gamma=1./lengthscale**2, coef0=bias)
-                kernel_dif = exact_kernel - approx_kernel
-                kernel_mse_errors[i] = kernel_dif.pow(2).mean()
-                kernel_abs_errors[i] = kernel_dif.abs().mean()
-                kernel_frob_errors[i] = (kernel_dif.pow(2).sum().sqrt() / exact_kernel.pow(2).sum().sqrt())
+        # Phase 3: Kernel estimation
+        for i in range(repetitions):
+            input_data_sample = input_data[torch.randperm(len(input_data), device=device)[:subsample_size]]
+            sketch.resample()
+            y = sketch.forward(input_data_sample)
+            approx_kernel = y @ y.t()
+            exact_kernel = polynomial_kernel(input_data_sample, input_data_sample, degree=p, gamma=1./lengthscale**2, coef0=bias)
+            kernel_dif = exact_kernel - approx_kernel
+            kernel_mse_errors[i] = kernel_dif.pow(2).mean()
+            kernel_abs_errors[i] = kernel_dif.abs().mean()
+            kernel_frob_errors[i] = (kernel_dif.pow(2).sum().sqrt() / exact_kernel.pow(2).sum().sqrt())
 
-            log_dir = {
-                'method': 'rf',
-                'D': D,
-                'proj': config['proj'],
-                'full_cov': config['full_cov'],
-                'complex_real': config['complex_real'],
-                'metric_time_ms': elapsed_time_ms / repetitions,
-                'mse_mean': kernel_mse_errors.mean(),
-                'mse_std': kernel_mse_errors.std(),
-                'mae_mean': kernel_abs_errors.mean(),
-                'mae_std': kernel_abs_errors.std(),
-                'frob_mean': kernel_frob_errors.mean(),
-                'frob_std': kernel_frob_errors.std()
-            }
-            log_handler.append(log_dir)
-            csv_handler.append(log_dir)
-            csv_handler.save()
-        except Exception as e:
-            print(e)
-            print('Skipping current configuration...')
-            continue
+        log_dir = {
+            'method': 'rf',
+            'D': D,
+            'proj': config['proj'],
+            'full_cov': config['full_cov'],
+            'complex_real': config['complex_real'],
+            'metric_time_ms': elapsed_time_ms / repetitions,
+            'mse_mean': kernel_mse_errors.mean(),
+            'mse_std': kernel_mse_errors.std(),
+            'mae_mean': kernel_abs_errors.mean(),
+            'mae_std': kernel_abs_errors.std(),
+            'frob_mean': kernel_frob_errors.mean(),
+            'frob_std': kernel_frob_errors.std()
+        }
+        log_handler.append(log_dir)
+        csv_handler.append(log_dir)
+        csv_handler.save()
+        # except Exception as e:
+            # print(e)
+            # print('Skipping current configuration...')
+            # continue

@@ -14,7 +14,7 @@ def generate_rademacher_samples(shape, complex_weights=False, device='cpu'):
     if complex_weights:
         support = torch.tensor([1j, -1j, 1, -1], dtype=torch.complex64, device=device)
     else:
-        support = torch.tensor([1, -1], dtype=torch.float32)
+        support = torch.tensor([1, -1], dtype=torch.float32, device=device)
     #samples = torch.index_select(support, 0, torch.randint(len(support), shape).view(-1))
     #return samples.reshape(shape)
     indices = torch.randint(len(support), shape)
