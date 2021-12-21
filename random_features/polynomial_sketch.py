@@ -240,7 +240,7 @@ class PolynomialSketch(torch.nn.Module):
 
     def forward(self, x):
         # (hierarchical) random feature construction
-        if self.complex_weights:
+        if self.complex_weights and self.projection_type != 'srht':
             x = x.type(torch.complex64)
 
         # we first apply the lengthscale
