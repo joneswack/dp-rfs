@@ -255,7 +255,7 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
     test_features = feature_encoder.forward(test_data_padded)
 
     torch.cuda.synchronize()
-    feature_time = time.time()
+    feature_time = time.time() - start
 
     ### kernel approximation on a subset of the test data
     approx_kernel = test_features[test_idxs] @ test_features[test_idxs].conj().t()
@@ -465,7 +465,8 @@ if __name__ == '__main__':
                 train_labels = torch.cat([train_labels, test_labels], dim=0)
                 current_train, current_test, current_train_labels, current_test_labels = util.data.create_train_val_split(train_data, train_labels, train_size=0.9)
             else:
-                crrent_train, current_test = train_data, test_data
+                current_train, current_test = train_data, test_data
+                current_train_labels, current_test_labels = train_labels, test_labels
 
             data_dict = prepare_data(
                 # for the polynomial kernel we need to pass on the kernel parameters or kernel function
@@ -490,15 +491,15 @@ if __name__ == '__main__':
                         config['hierarchical'] = False
 
                     with torch.no_grad():
-                        try:
-                            log_dir = run_rf_gp(data_dict, d_features, config, args, rf_parameters, seed)
-                            log_handler.append(log_dir)
-                            csv_handler.append(log_dir)
-                            csv_handler.save()
-                        except Exception as e:
-                            print(e)
-                            print('Skipping current configuration...')
-                            continue
+                        # try:
+                        log_dir = run_rf_gp(data_dict, d_features, config, args, rf_parameters, seed)
+                        log_handler.append(log_dir)
+                        csv_handler.append(log_dir)
+                        csv_handler.save()
+                        # except Exception as e:
+                        #     print(e)
+                        #     print('Skipping current configuration...')
+                        #     continue
 
 
         print('Total execution time: {:.2f}'.format(time.time()-start_time))

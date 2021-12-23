@@ -34,6 +34,6 @@
         {"method": "poly_sketch", "proj": "rademacher", "hierarchical": false, "complex_weights": true},
         {"method": "poly_sketch", "proj": "srht", "hierarchical": false, "complex_weights": false},
         {"method": "poly_sketch", "proj": "srht", "hierarchical": false, "complex_weights": true},
-        {"method": "poly_sketch", "proj": "countsketch_scatter", "hierarchical": false, "complex_weights": false},
+        {"method": "poly_sketch", "proj": "countsketch_scatter", "hierarchical": false, "complex_weights": false}
     ]
 }
