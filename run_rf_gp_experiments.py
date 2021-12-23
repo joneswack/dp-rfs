@@ -86,7 +86,8 @@ def prepare_data(config, args, rf_parameters, data_name, current_train, current_
     else:
         if data_name not in ['MNIST']:
             # we skip zero centering for mnist for the polynomial kernel
-            current_train, current_test = util.data.standardize_data(current_train, current_test)
+            # current_train, current_test = util.data.standardize_data(current_train, current_test)
+            pass
         # unit normalization
         current_train = current_train / current_train.norm(dim=1, keepdim=True)
         current_test = current_test / current_test.norm(dim=1, keepdim=True)
@@ -201,7 +202,7 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
                                         'hierarchical': config['hierarchical'],
                                         'complex_weights': config['complex_weights']
                                     },
-                                    measure=measure, bias=0,
+                                    measure=measure, bias=0, device=('cuda' if args.use_gpu else 'cpu'),
                                     lengthscale=data_dict['lengthscale'],
                                     var=data_dict['kernel_var'], ard=False, trainable_kernel=False)
 
@@ -224,7 +225,7 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
                                         degree=config['degree'], bias=config['bias'],
                                         projection_type=config['proj'], hierarchical=config['hierarchical'],
                                         complex_weights=config['complex_weights'],
-                                        lengthscale=data_dict['lengthscale'],
+                                        lengthscale=data_dict['lengthscale'], device=('cuda' if args.use_gpu else 'cpu'),
                                         var=data_dict['kernel_var'], ard=False, trainable_kernel=False)
         
     if config['method'] == 'srf':
@@ -244,12 +245,17 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
     het_gp = HeteroskedasticGP(None)
 
     # before computing the random features, we empty the cuda cache
-    start = time.time()
     del data_dict
     torch.cuda.empty_cache()
 
+    torch.cuda.synchronize()
+    start = time.time()
+
     train_features = feature_encoder.forward(train_data_padded)
     test_features = feature_encoder.forward(test_data_padded)
+
+    torch.cuda.synchronize()
+    feature_time = time.time()
 
     ### kernel approximation on a subset of the test data
     approx_kernel = test_features[test_idxs] @ test_features[test_idxs].conj().t()
@@ -278,11 +284,18 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
     test_var_mse = (f_test_stds_ref**2 - f_test_stds_est**2).pow(2).mean()
 
     ### gp prediction
+    torch.cuda.synchronize()
+    start = time.time()
+
     if regression:
         f_test_mean, f_test_stds = het_gp.predictive_dist(
             train_features, test_features,
             train_labels, train_label_vars
         )
+        
+        torch.cuda.synchronize()
+        prediction_time = time.time() - start
+
         f_test_mean += train_label_mean
         test_error, test_mnll = regression_scores(f_test_mean, f_test_stds**2 + noise_var, test_labels)
     else:
@@ -290,14 +303,14 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
             train_features, test_features, train_labels, train_label_vars,
             num_samples=args.num_mc_samples
         )
+
+        torch.cuda.synchronize()
+        prediction_time = time.time() - start
+
         test_predictions += train_label_mean
         test_error, test_mnll = classification_scores(test_predictions, test_labels)
 
     test_label_var = test_labels.var(unbiased=False).item()
-
-    elapsed = time.time() - start
-
-    print('Time elapsed: {}'.format(elapsed))
 
     if isinstance(feature_encoder, GaussianApproximator):
         feature_dist = str(feature_encoder.feature_encoder.measure.distribution) if config['method'] == 'maclaurin' else 'None'
@@ -326,7 +339,8 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
         'D': d_features,
         'feature_dist': feature_dist,
         'noise_var': noise_var,
-        'pred_time': elapsed,
+        'feature_time': feature_time,
+        'pred_time': prediction_time,
         'seed': seed
     }
         

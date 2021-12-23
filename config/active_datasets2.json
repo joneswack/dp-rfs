@@ -1,0 +1,7 @@
+{
+    "regression": [
+    ],
+    "classification": [
+        "config/datasets/fashion_mnist.json"
+    ]
+}

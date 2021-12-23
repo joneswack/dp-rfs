@@ -1,0 +1,39 @@
+{
+    "kernel": "polynomial",
+    "save_name": "poly3_approx",
+    "degree": 3,
+    "a": 4,
+    "min_sampling_degree": 2,
+    "max_sampling_degree": 10,
+    "projection_range": {
+        "min": 1,
+        "max": 5,
+        "step": 1
+    },
+    "noise_var_range": {
+        "regression": {
+            "min": -15,
+            "max": 14,
+            "base": 2
+        },
+        "classification": {
+            "min": -3,
+            "max": 0,
+            "base": 10
+        }
+    },
+    "srf_model_path_prefix": "saved_models/poly_a4.0_p3",
+    "baseline_config": {"method": "srf", "proj": "gaussian", "complex_weights": false},
+    "configurations": [
+        {"method": "maclaurin", "proj": "rademacher", "hierarchical": false, "complex_weights": false},
+        {"method": "maclaurin", "proj": "rademacher", "hierarchical": false, "complex_weights": true},
+        {"method": "maclaurin", "proj": "srht", "hierarchical": false, "complex_weights": false},
+        {"method": "maclaurin", "proj": "srht", "hierarchical": false, "complex_weights": true},
+        {"method": "maclaurin", "proj": "countsketch_scatter", "hierarchical": false, "complex_weights": false},
+        {"method": "poly_sketch", "proj": "rademacher", "hierarchical": false, "complex_weights": false},
+        {"method": "poly_sketch", "proj": "rademacher", "hierarchical": false, "complex_weights": true},
+        {"method": "poly_sketch", "proj": "srht", "hierarchical": false, "complex_weights": false},
+        {"method": "poly_sketch", "proj": "srht", "hierarchical": false, "complex_weights": true},
+        {"method": "poly_sketch", "proj": "countsketch_scatter", "hierarchical": false, "complex_weights": false},
+    ]
+}

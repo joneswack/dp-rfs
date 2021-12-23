@@ -19,7 +19,7 @@ class Maclaurin(torch.nn.Module):
     def __init__(self, d_in, d_features, coef_fun,
                         module_args={'projection': 'srht', 'hierarchical': False, 'complex_weights': False},
                         measure=P_Measure(2, False, 10), bias=0., lengthscale='auto', var=1.0, ard=False,
-                        trainable_kernel=False, dtype=torch.FloatTensor):
+                        trainable_kernel=False, dtype=torch.FloatTensor, device='cpu'):
         """
         d_in: Data input dimension
         d_features: Projection dimension
@@ -38,6 +38,7 @@ class Maclaurin(torch.nn.Module):
         self.d_features = d_features
         self.coef_fun = coef_fun
         self.module_args = module_args
+        self.device = device
 
         self.measure = measure
 
@@ -56,7 +57,7 @@ class Maclaurin(torch.nn.Module):
 
         # we initialize the kernel hyperparameters
         if bias != 0:
-            self.log_bias = torch.nn.Parameter(torch.ones(1).type(dtype) * np.log(bias), requires_grad=trainable_kernel)
+            self.log_bias = torch.nn.Parameter(torch.ones(1, device=device).type(dtype) * np.log(bias), requires_grad=trainable_kernel)
             self.d_in = self.d_in + 1
         else:
             self.log_bias = None
@@ -65,8 +66,8 @@ class Maclaurin(torch.nn.Module):
             lengthscale = np.sqrt(d_in)
 
         num_lengthscales = d_in if ard else 1
-        self.log_lengthscale = torch.nn.Parameter(torch.ones(num_lengthscales).type(dtype) * np.log(lengthscale), requires_grad=trainable_kernel)
-        self.log_var = torch.nn.Parameter(torch.ones(1).type(dtype) * np.log(var), requires_grad=trainable_kernel)
+        self.log_lengthscale = torch.nn.Parameter(torch.ones(num_lengthscales, device=device).type(dtype) * np.log(lengthscale), requires_grad=trainable_kernel)
+        self.log_var = torch.nn.Parameter(torch.ones(1, device=device).type(dtype) * np.log(var), requires_grad=trainable_kernel)
 
         self.dtype = dtype
 
