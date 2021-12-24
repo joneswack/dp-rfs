@@ -479,6 +479,9 @@ if __name__ == '__main__':
 
             for d_features in dimensions:
                 for config in configurations:
+                    if config['complex_weights'] and d_features > 5*pow_2_shape:
+                        continue
+                    
                     # add bias, lengthscale and degree for the polynomial kernel
                     if rf_parameters['kernel'] == 'polynomial':
                         config['bias'] = baseline_config['bias']
@@ -504,3 +507,6 @@ if __name__ == '__main__':
 
         print('Total execution time: {:.2f}'.format(time.time()-start_time))
         print('Done!')
+        # Prevent script from finishing!
+        while True:
+            continue
