@@ -508,5 +508,5 @@ if __name__ == '__main__':
         print('Total execution time: {:.2f}'.format(time.time()-start_time))
         print('Done!')
         # Prevent script from finishing!
-        while True:
-            continue
+        # while True:
+            # continue
