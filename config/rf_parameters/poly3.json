@@ -7,7 +7,7 @@
     "max_sampling_degree": 10,
     "projection_range": {
         "min": 1,
-        "max": 5,
+        "max": 10,
         "step": 1
     },
     "noise_var_range": {
