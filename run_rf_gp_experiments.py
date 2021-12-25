@@ -86,8 +86,8 @@ def prepare_data(config, args, rf_parameters, data_name, current_train, current_
     else:
         if data_name not in ['MNIST']:
             # we skip zero centering for mnist for the polynomial kernel
-            # current_train, current_test = util.data.standardize_data(current_train, current_test)
-            pass
+            current_train, current_test = util.data.standardize_data(current_train, current_test)
+            # pass
         # unit normalization
         current_train = current_train / current_train.norm(dim=1, keepdim=True)
         current_test = current_test / current_test.norm(dim=1, keepdim=True)
@@ -479,6 +479,9 @@ if __name__ == '__main__':
 
             for d_features in dimensions:
                 for config in configurations:
+                    if config['complex_weights'] and d_features > 5*pow_2_shape:
+                        continue
+                    
                     # add bias, lengthscale and degree for the polynomial kernel
                     if rf_parameters['kernel'] == 'polynomial':
                         config['bias'] = baseline_config['bias']
@@ -504,3 +507,6 @@ if __name__ == '__main__':
 
         print('Total execution time: {:.2f}'.format(time.time()-start_time))
         print('Done!')
+        # Prevent script from finishing!
+        # while True:
+            # continue
