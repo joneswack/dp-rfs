@@ -1,6 +1,6 @@
 {
     "kernel": "polynomial",
-    "save_name": "poly10_approx",
+    "save_name": "poly10_approx_0mean",
     "degree": 10,
     "a": 4,
     "min_sampling_degree": 2,
