@@ -63,7 +63,7 @@ d = 1024
 
 
 # polynomial kernel parameters
-p=3
+p=6
 bias=1
 # ONLY IF NOT UNIT-NORMALIZED
 # lengthscale = np.sqrt(input_data.shape[1])
