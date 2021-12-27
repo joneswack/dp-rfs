@@ -72,8 +72,8 @@ kwargs = {
 
 # Inception CIFAR-10
 feature_extraction_time_ms = 0
-featuresdict_1 = {'2048': torch.load('saved_models/conv_features/cifar10-val-inc-v3-2048.pth')}
-featuresdict_2 = {'2048': torch.load('saved_models/conv_features/cifar10-train-inc-v3-2048.pth')}
+featuresdict_1 = {'2048': torch.load('../datasets/conv_features/cifar10-val-inc-v3-2048.pth')}
+featuresdict_2 = {'2048': torch.load('../datasets/conv_features/cifar10-train-inc-v3-2048.pth')}
 
 input_data_1 = featuresdict_1['2048'][:, :-1].to(device)
 input_data_2 = featuresdict_2['2048'][:, :-1].to(device)
