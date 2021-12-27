@@ -22,7 +22,7 @@ from util.hadamard_cuda.fwht import FastWalshHadamardTransform
 from random_features.polynomial_sketch import PolynomialSketch
 
 device = 'cuda'
-repetitions = 1000
+repetitions = 100
 verbose = True
 torch.manual_seed(0)
 mmd_est = 'unbiased'
@@ -52,28 +52,28 @@ kwargs = {
     'input2': 'cifar10-train',
     'cuda': device == 'cuda'
 }
-# feat_extractor = create_feature_extractor('inception-v3-compat', ['2048'], **kwargs)
+feat_extractor = create_feature_extractor('inception-v3-compat', ['2048'], **kwargs)
 
-# # warm up
-# _ = extract_featuresdict_from_input_id(1, feat_extractor, **kwargs)
+# warm up
+_ = extract_featuresdict_from_input_id(1, feat_extractor, **kwargs)
 
-# torch.cuda.synchronize()
-# start = timer()
+torch.cuda.synchronize()
+start = timer()
 
-# featuresdict_1 = extract_featuresdict_from_input_id(1, feat_extractor, **kwargs)
-# featuresdict_2 = extract_featuresdict_from_input_id(2, feat_extractor, **kwargs)
+featuresdict_1 = extract_featuresdict_from_input_id(1, feat_extractor, **kwargs)
+featuresdict_2 = extract_featuresdict_from_input_id(2, feat_extractor, **kwargs)
 
-# torch.cuda.synchronize()
-# feature_extraction_time_ms = (timer() - start) * 1000
-# print('Feature extraction time:', feature_extraction_time_ms)
+torch.cuda.synchronize()
+feature_extraction_time_ms = (timer() - start) * 1000
+print('Feature extraction time:', feature_extraction_time_ms)
 
 # torch.save(featuresdict_2['2048'], 'saved_models/conv_features/cifar10-train-inc-v3-2048.pth')
 # torch.save(featuresdict_1['2048'], 'saved_models/conv_features/cifar10-val-inc-v3-2048.pth')
 
 # Inception CIFAR-10
-feature_extraction_time_ms = 0
-featuresdict_1 = {'2048': torch.load('../datasets/conv_features/cifar10-val-inc-v3-2048.pth')}
-featuresdict_2 = {'2048': torch.load('../datasets/conv_features/cifar10-train-inc-v3-2048.pth')}
+# feature_extraction_time_ms = 0
+# featuresdict_1 = {'2048': torch.load('../datasets/export/conv_features/cifar10-val-inc-v3-2048.pth')}
+# featuresdict_2 = {'2048': torch.load('../datasets/export/conv_features/cifar10-train-inc-v3-2048.pth')}
 
 input_data_1 = featuresdict_1['2048'][:, :-1].to(device)
 input_data_2 = featuresdict_2['2048'][:, :-1].to(device)
@@ -160,38 +160,38 @@ def block_mmd_estimate(repetitions, num_samples=10000):
 
 results_block_mmd = []
 
-# for num_samples in block_mmd_samples:
-#     # warmups
-#     try:
-#         torch.cuda.empty_cache()
+for num_samples in block_mmd_samples:
+    # warmups
+    try:
+        torch.cuda.empty_cache()
 
-#         _, _ = block_mmd_estimate(repetitions, num_samples=num_samples)
+        _, _ = block_mmd_estimate(repetitions, num_samples=num_samples)
 
-#         torch.cuda.synchronize()
-#         start = timer()
+        torch.cuda.synchronize()
+        start = timer()
 
-#         mean, std = block_mmd_estimate(repetitions, num_samples=num_samples)
+        mean, std = block_mmd_estimate(repetitions, num_samples=num_samples)
 
-#         torch.cuda.synchronize()
+        torch.cuda.synchronize()
 
-#         elapsed_time_ms = (timer() - start) * 1000
+        elapsed_time_ms = (timer() - start) * 1000
 
-#         print(num_samples, elapsed_time_ms)
-#         log_dir = {
-#             'method': 'block-mmd',
-#             'n': num_samples,
-#             'metric_time_ms': elapsed_time_ms,
-#             'feature_time_ms': feature_extraction_time_ms,
-#             'mean': mean,
-#             'std': std
-#         }
-#         log_handler.append(log_dir)
-#         csv_handler.append(log_dir)
-#         csv_handler.save()
-#     except Exception as e:
-#         print(e)
-#         print('Skipping current configuration...')
-#         continue
+        print(num_samples, elapsed_time_ms)
+        log_dir = {
+            'method': 'block-mmd',
+            'n': num_samples,
+            'metric_time_ms': elapsed_time_ms,
+            'feature_time_ms': feature_extraction_time_ms,
+            'mean': mean,
+            'std': std
+        }
+        log_handler.append(log_dir)
+        csv_handler.append(log_dir)
+        csv_handler.save()
+    except Exception as e:
+        print(e)
+        print('Skipping current configuration...')
+        continue
 
 ### Random Feature MMD
 
