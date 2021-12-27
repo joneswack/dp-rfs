@@ -29,7 +29,7 @@ mmd_est = 'unbiased'
 p=3
 
 block_mmd_samples = [100, 1000, 5000, 10000, 15000, 20000]
-rf_dims = [64, 128, 256, 512, 1024, 2048, 2048*2, 2048*3, 2048*4] # 2048*5
+rf_dims = [64, 128, 256, 512, 1024] + [i*2048 for i in range(1,11)] # 2048*5
 # rf_dims = [2048*4]
 rf_configs = [
     {'proj': 'countsketch_scatter', 'full_cov': False, 'complex_real': False},
@@ -228,7 +228,7 @@ def rf_mmd_estimate(input_data_1, input_data_2, repetitions, D, proj='srht', ful
     sketch = PolynomialSketch(
         input_data_1.shape[1], D, degree=p, bias=1, lengthscale=np.sqrt(2047),
         projection_type=proj, full_cov=full_cov, complex_real=complex_real,
-        device=device
+        device=device, convolute_ts=(proj.startswith('countsketch'))
     )
 
     for i in tqdm(
