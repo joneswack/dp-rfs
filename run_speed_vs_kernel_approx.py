@@ -63,7 +63,7 @@ d = 1024
 
 
 # polynomial kernel parameters
-p=6
+p=3
 bias=1
 # ONLY IF NOT UNIT-NORMALIZED
 # lengthscale = np.sqrt(input_data.shape[1])
@@ -82,16 +82,16 @@ rf_configs = [
     {'proj': 'countsketch_scatter', 'full_cov': False, 'complex_real': False},
     # {'proj': 'gaussian', 'full_cov': False, 'complex_real': False},
     # {'proj': 'gaussian', 'full_cov': False, 'complex_real': True},
-    # {'proj': 'rademacher', 'full_cov': False, 'complex_real': False},
-    # {'proj': 'rademacher', 'full_cov': False, 'complex_real': True},
-    # {'proj': 'srht', 'full_cov': False, 'complex_real': False},
-    # {'proj': 'srht', 'full_cov': False, 'complex_real': True},
-    {'proj': 'srht', 'full_cov': True, 'complex_real': False},
-    {'proj': 'srht', 'full_cov': True, 'complex_real': True}
+    {'proj': 'rademacher', 'full_cov': False, 'complex_real': False},
+    {'proj': 'rademacher', 'full_cov': False, 'complex_real': True},
+    {'proj': 'srht', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
+    {'proj': 'srht', 'full_cov': False, 'complex_weights': True, 'complex_real': False},
+    {'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': False},
+    {'proj': 'srht', 'full_cov': True, 'complex_weights': True, 'complex_real': True}
 ]
 
-log_handler = util.data.Log_Handler('time_benchmark', 'rep{}_p{}_bias{}_mnist'.format(repetitions, p, bias))
-csv_handler = util.data.DF_Handler('time_benchmark', 'rep{}_p{}_bias{}_mnist'.format(repetitions, p, bias))
+log_handler = util.data.Log_Handler('time_benchmark', 'rep{}_p{}_bias{}_mnist2'.format(repetitions, p, bias))
+csv_handler = util.data.DF_Handler('time_benchmark', 'rep{}_p{}_bias{}_mnist2'.format(repetitions, p, bias))
 
 def polynomial_kernel(X, Y, degree=3, gamma=None, coef0=1):
     if gamma is None:
@@ -102,9 +102,9 @@ def polynomial_kernel(X, Y, degree=3, gamma=None, coef0=1):
 for config in rf_configs:
     for D in rf_dims:
         sketch = PolynomialSketch(
-            input_data.shape[1], D, degree=p, bias=bias, lengthscale=lengthscale,
+            input_data.shape[1], D, degree=p, bias=bias, lengthscale=lengthscale, device=device,
             projection_type=config['proj'], full_cov=config['full_cov'], complex_real=config['complex_real'],
-            convolute_ts=(config['proj'].startswith('countsketch')), device=device
+            convolute_ts=(config['proj'].startswith('countsketch')), complex_weights=config['complex_weights']
         ).to(device)
 
         kernel_mse_errors = np.zeros(repetitions)
@@ -138,7 +138,7 @@ for config in rf_configs:
                 input_data_sample = input_data[torch.randperm(len(input_data), device=device)[:subsample_size]]
                 sketch.resample()
                 y = sketch.forward(input_data_sample)
-                approx_kernel = y @ y.t()
+                approx_kernel = y @ y.conj().t()
                 exact_kernel = polynomial_kernel(input_data_sample, input_data_sample, degree=p, gamma=1./lengthscale**2, coef0=bias)
                 kernel_dif = exact_kernel - approx_kernel
                 kernel_mse_errors[i] = kernel_dif.pow(2).mean()
