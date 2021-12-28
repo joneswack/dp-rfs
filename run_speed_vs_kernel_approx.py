@@ -79,11 +79,11 @@ rf_dims = [i*d for i in range(1, 21)]
 # rf_dims = [512]
 # rf_dims = [512*2]
 rf_configs = [
-    {'proj': 'countsketch_scatter', 'full_cov': False, 'complex_real': False},
+    {'proj': 'countsketch_scatter', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
     # {'proj': 'gaussian', 'full_cov': False, 'complex_real': False},
     # {'proj': 'gaussian', 'full_cov': False, 'complex_real': True},
-    {'proj': 'rademacher', 'full_cov': False, 'complex_real': False},
-    {'proj': 'rademacher', 'full_cov': False, 'complex_real': True},
+    {'proj': 'rademacher', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
+    {'proj': 'rademacher', 'full_cov': False, 'complex_weights': False, 'complex_real': True},
     {'proj': 'srht', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
     {'proj': 'srht', 'full_cov': False, 'complex_weights': True, 'complex_real': False},
     {'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': False},
