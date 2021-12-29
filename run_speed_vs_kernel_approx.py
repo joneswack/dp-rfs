@@ -87,11 +87,11 @@ rf_configs = [
     {'proj': 'srht', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
     {'proj': 'srht', 'full_cov': False, 'complex_weights': True, 'complex_real': False},
     {'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': False},
-    {'proj': 'srht', 'full_cov': True, 'complex_weights': True, 'complex_real': True}
+    {'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': True}
 ]
 
-log_handler = util.data.Log_Handler('time_benchmark', 'rep{}_p{}_bias{}_mnist2'.format(repetitions, p, bias))
-csv_handler = util.data.DF_Handler('time_benchmark', 'rep{}_p{}_bias{}_mnist2'.format(repetitions, p, bias))
+log_handler = util.data.Log_Handler('time_benchmark', 'rep{}_p{}_bias{}_mnist'.format(repetitions, p, bias))
+csv_handler = util.data.DF_Handler('time_benchmark', 'rep{}_p{}_bias{}_mnist'.format(repetitions, p, bias))
 
 def polynomial_kernel(X, Y, degree=3, gamma=None, coef0=1):
     if gamma is None:
@@ -111,58 +111,67 @@ for config in rf_configs:
         kernel_frob_errors = np.zeros(repetitions)
         kernel_abs_errors = np.zeros(repetitions)
 
-        try:
-            torch.cuda.empty_cache()
+        # try:
+        torch.cuda.empty_cache()
 
-            # Phase 1: Warm up
-            for _ in range(repetitions):
-                sketch.resample()
-                _ = sketch.forward(input_data_sample)
+        # Phase 1: Warm up
+        for _ in range(repetitions):
+            sketch.resample()
+            _ = sketch.forward(input_data_sample)
 
-            # Phase 2: RF time measurement
-            elapsed_time_ms = 0
+        # Phase 2: RF time measurement
+        elapsed_time_ms = 0
 
-            for _ in range(repetitions):
-                # we do not measure the resampling time now
-                sketch.resample()
+        for _ in range(repetitions):
+            # we do not measure the resampling time now
+            sketch.resample()
 
-                torch.cuda.synchronize()
-                start = timer()
-                _ = sketch.forward(input_data_sample)
+            torch.cuda.synchronize()
+            start = timer()
+            _ = sketch.forward(input_data_sample)
 
-                torch.cuda.synchronize()
-                elapsed_time_ms += (timer() - start) * 1000
+            torch.cuda.synchronize()
+            elapsed_time_ms += (timer() - start) * 1000
 
-            # Phase 3: Kernel estimation
-            for i in range(repetitions):
-                input_data_sample = input_data[torch.randperm(len(input_data), device=device)[:subsample_size]]
-                sketch.resample()
-                y = sketch.forward(input_data_sample)
-                approx_kernel = y @ y.conj().t()
-                exact_kernel = polynomial_kernel(input_data_sample, input_data_sample, degree=p, gamma=1./lengthscale**2, coef0=bias)
-                kernel_dif = exact_kernel - approx_kernel
+        # Phase 3: Kernel estimation
+        for i in range(repetitions):
+            input_data_sample = input_data[torch.randperm(len(input_data), device=device)[:subsample_size]]
+            sketch.resample()
+            y = sketch.forward(input_data_sample)
+            approx_kernel = y @ y.conj().t()
+            exact_kernel = polynomial_kernel(input_data_sample, input_data_sample, degree=p, gamma=1./lengthscale**2, coef0=bias)
+            #exact_kernel = exact_kernel.double()
+            #approx_kernel.real = approx_kernel.type(torch.complex128)
+            kernel_dif = exact_kernel - approx_kernel
+            # kernel_dif is now complex
+            if config['complex_weights']:
+                kernel_mse_errors[i] = (kernel_dif.real.pow(2) + kernel_dif.imag.pow(2)).mean()
+                kernel_abs_errors[i] = (kernel_dif.real.pow(2) + kernel_dif.imag.pow(2)).sqrt().mean()
+                kernel_frob_errors[i] = ((kernel_dif.real.pow(2) + kernel_dif.imag.pow(2)).sum().sqrt() / exact_kernel.pow(2).sum().sqrt())
+            else:
                 kernel_mse_errors[i] = kernel_dif.pow(2).mean()
                 kernel_abs_errors[i] = kernel_dif.abs().mean()
                 kernel_frob_errors[i] = (kernel_dif.pow(2).sum().sqrt() / exact_kernel.pow(2).sum().sqrt())
 
-            log_dir = {
-                'method': 'rf',
-                'D': D,
-                'proj': config['proj'],
-                'full_cov': config['full_cov'],
-                'complex_real': config['complex_real'],
-                'metric_time_ms': elapsed_time_ms / repetitions,
-                'mse_mean': kernel_mse_errors.mean(),
-                'mse_std': kernel_mse_errors.std(),
-                'mae_mean': kernel_abs_errors.mean(),
-                'mae_std': kernel_abs_errors.std(),
-                'frob_mean': kernel_frob_errors.mean(),
-                'frob_std': kernel_frob_errors.std()
-            }
-            log_handler.append(log_dir)
-            csv_handler.append(log_dir)
-            csv_handler.save()
-        except Exception as e:
-            print(e)
-            print('Skipping current configuration...')
-            continue
+        log_dir = {
+            'method': 'rf',
+            'D': D,
+            'proj': config['proj'],
+            'full_cov': config['full_cov'],
+            'complex_weights': config['complex_weights'],
+            'complex_real': config['complex_real'],
+            'metric_time_ms': elapsed_time_ms / repetitions,
+            'mse_mean': kernel_mse_errors.mean(),
+            'mse_std': kernel_mse_errors.std(),
+            'mae_mean': kernel_abs_errors.mean(),
+            'mae_std': kernel_abs_errors.std(),
+            'frob_mean': kernel_frob_errors.mean(),
+            'frob_std': kernel_frob_errors.std()
+        }
+        log_handler.append(log_dir)
+        csv_handler.append(log_dir)
+        csv_handler.save()
+        # except Exception as e:
+        #     print(e)
+        #     print('Skipping current configuration...')
+        #     continue
