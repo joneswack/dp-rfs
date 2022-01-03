@@ -75,7 +75,8 @@ subsample_size = 1000
 # this data sample will be recomputed for every repetition later on
 input_data_sample = input_data[torch.randperm(len(input_data), device=device)[:subsample_size]]
 # rf_dims = [64, 128, 256, 512, 1024, 2048, 2048*2, 2048*3, 2048*4, 2048*5, 2048*6]
-rf_dims = [i*d for i in range(1, 21)]
+rf_dims_slow = [i*d for i in range(1, 21)]
+rf_dims_fast = [i*d for i in range(1, 31)]
 # rf_dims = [512]
 # rf_dims = [512*2]
 rf_configs = [
@@ -100,6 +101,16 @@ def polynomial_kernel(X, Y, degree=3, gamma=None, coef0=1):
     return K
 
 for config in rf_configs:
+    if config['proj'] == 'srht' and (not config['complex_real']) \
+        and (not config['complex_weights']):
+        # R-TensorSRHT (DB/IB)
+        rf_dims = rf_dims_fast
+    elif config['proj'] == 'countsketch_scatter':
+        # TensorSketch
+        rf_dims = rf_dims_fast
+    else:
+        rf_dims = rf_dims_slow
+
     for D in rf_dims:
         sketch = PolynomialSketch(
             input_data.shape[1], D, degree=p, bias=bias, lengthscale=lengthscale, device=device,
