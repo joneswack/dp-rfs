@@ -2,6 +2,6 @@
     "regression": [
     ],
     "classification": [
-        "config/datasets/fashion_mnist.json"
+        "config/datasets/mnist.json"
     ]
 }

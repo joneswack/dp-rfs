@@ -86,7 +86,9 @@ def prepare_data(config, args, rf_parameters, data_name, current_train, current_
     else:
         if data_name not in ['MNIST']:
             # we skip zero centering for mnist for the polynomial kernel
-            current_train, current_test = util.data.standardize_data(current_train, current_test)
+            # current_train, current_test = util.data.standardize_data(current_train, current_test)
+            current_train = current_train - torch.min(current_train, 0)[0]
+            current_test = current_test - torch.min(current_train, 0)[0]
             # pass
         # unit normalization
         current_train = current_train / current_train.norm(dim=1, keepdim=True)
@@ -418,31 +420,31 @@ if __name__ == '__main__':
             float(noise_var_params['base'])**i for i in range(noise_var_params['min'], noise_var_params['max']+1)
         ]
         
-        for noise_var in noise_vars:
-            # config, data_name, current_train, current_test, train_labels, test_labels, num_samples, noise_var, regression=False
-            with torch.no_grad():
-                try:
-                    data_dict = prepare_data(baseline_config, args, rf_parameters,
-                        data_name, sub_data, val_data, sub_labels, val_labels,
-                        noise_var, regression=regression
-                    )
+        # for noise_var in noise_vars:
+        #     # config, data_name, current_train, current_test, train_labels, test_labels, num_samples, noise_var, regression=False
+        #     with torch.no_grad():
+        #         try:
+        #             data_dict = prepare_data(baseline_config, args, rf_parameters,
+        #                 data_name, sub_data, val_data, sub_labels, val_labels,
+        #                 noise_var, regression=regression
+        #             )
 
-                    log_dir = run_rf_gp(data_dict, d_features, baseline_config, args, rf_parameters, 0)
-                except Exception as e:
-                    print(e)
-                    print('Skipping current configuration...')
-                    continue
+        #             log_dir = run_rf_gp(data_dict, d_features, baseline_config, args, rf_parameters, 0)
+        #         except Exception as e:
+        #             print(e)
+        #             print('Skipping current configuration...')
+        #             continue
 
-            noise_var_csv_handler.append(log_dir)
-            log_handler.append(log_dir)
-            noise_var_csv_handler.save()
+        #     noise_var_csv_handler.append(log_dir)
+        #     log_handler.append(log_dir)
+        #     noise_var_csv_handler.save()
 
-        noise_var_df = pd.read_csv(noise_var_csv_handler.file_path)
-        noise_var_opt = noise_var_df.sort_values('test_mnll', axis=0, ascending=True)['noise_var'].values[0]
+        # noise_var_df = pd.read_csv(noise_var_csv_handler.file_path)
+        # noise_var_opt = noise_var_df.sort_values('test_mnll', axis=0, ascending=True)['noise_var'].values[0]
 
-        print('Optimal noise var: {}'.format(noise_var_opt))
+        # print('Optimal noise var: {}'.format(noise_var_opt))
 
-        # alpha_opt = 10**(-1)
+        noise_var_opt = 10**(-3)
 
         del sub_data, val_data
         
