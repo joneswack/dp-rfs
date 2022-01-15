@@ -88,8 +88,9 @@ def prepare_data(config, args, rf_parameters, data_name, current_train, current_
             # we skip zero centering for mnist for the polynomial kernel
             # current_train, current_test = util.data.standardize_data(current_train, current_test)
             pass
-        current_train = current_train - torch.min(current_train, 0)[0]
-        current_test = current_test - torch.min(current_train, 0)[0]
+        min_val = torch.min(current_train, 0)[0]
+        current_train = current_train - min_val
+        current_test = current_test - min_val
         # unit normalization
         current_train = current_train / current_train.norm(dim=1, keepdim=True)
         current_test = current_test / current_test.norm(dim=1, keepdim=True)
@@ -153,6 +154,9 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
         offset = 1
     else:
         offset = 0
+
+    comp_real = config['complex_real'] if 'complex_real' in config.keys() else False
+    full_cov = config['full_cov'] if 'full_cov' in config.keys() else False
     
     train_data_padded = util.data.pad_data_pow_2(data_dict['train_data'], offset=offset)
     test_data_padded = util.data.pad_data_pow_2(data_dict['test_data'], offset=offset)
@@ -233,7 +237,8 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
         feature_encoder = PolynomialSketch(train_data_padded.shape[1], d_features,
                                         degree=config['degree'], bias=config['bias'],
                                         projection_type=config['proj'], hierarchical=config['hierarchical'],
-                                        complex_weights=config['complex_weights'],
+                                        complex_weights=config['complex_weights'], complex_real=comp_real,
+                                        full_cov=full_cov,
                                         lengthscale=data_dict['lengthscale'], device=('cuda' if args.use_gpu else 'cpu'),
                                         var=data_dict['kernel_var'], ard=False, trainable_kernel=False)
         
@@ -257,13 +262,13 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
     del data_dict
     torch.cuda.empty_cache()
 
-    # torch.cuda.synchronize()
+    torch.cuda.synchronize()
     start = time.time()
 
     train_features = feature_encoder.forward(train_data_padded)
     test_features = feature_encoder.forward(test_data_padded)
 
-    # torch.cuda.synchronize()
+    torch.cuda.synchronize()
     feature_time = time.time() - start
 
     ### kernel approximation on a subset of the test data
@@ -293,7 +298,7 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
     test_var_mse = (f_test_stds_ref**2 - f_test_stds_est**2).pow(2).mean()
 
     ### gp prediction
-    # torch.cuda.synchronize()
+    torch.cuda.synchronize()
     start = time.time()
 
     if regression:
@@ -302,7 +307,7 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
             train_labels, train_label_vars
         )
         
-        # torch.cuda.synchronize()
+        torch.cuda.synchronize()
         prediction_time = time.time() - start
 
         f_test_mean += train_label_mean
@@ -313,7 +318,7 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
             num_samples=args.num_mc_samples
         )
 
-        # torch.cuda.synchronize()
+        torch.cuda.synchronize()
         prediction_time = time.time() - start
 
         test_predictions += train_label_mean
@@ -333,6 +338,8 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
         'bias': config['bias'],
         'proj': config['proj'],
         'comp': config['complex_weights'],
+        'comp_real': comp_real,
+        'full_cov': full_cov,
         'hier': config['hierarchical'],
         'kernel_var': feature_encoder.log_var.exp().item(),
         'kernel_len': feature_encoder.log_lengthscale.exp().item(),
