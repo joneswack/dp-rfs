@@ -20,9 +20,9 @@ from util.measures import Fixed_Measure, Polynomial_Measure, P_Measure
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rf_parameter_file', type=str, required=True,
+    parser.add_argument('--rf_parameter_file', type=str, required=False, default='config/rf_parameters/poly3_ctr.json',
                         help='Path to RF parameter file')
-    parser.add_argument('--datasets_file', type=str, required=False, default='config/active_datasets.json',
+    parser.add_argument('--datasets_file', type=str, required=False, default='config/active_datasets2.json',
                         help='List of datasets to be used for the experiments')
     parser.add_argument('--num_data_samples', type=int, required=False, default=5000,
                         help='Number of data samples for lengthscale estimation')
@@ -87,9 +87,9 @@ def prepare_data(config, args, rf_parameters, data_name, current_train, current_
         if data_name not in ['MNIST']:
             # we skip zero centering for mnist for the polynomial kernel
             # current_train, current_test = util.data.standardize_data(current_train, current_test)
-            current_train = current_train - torch.min(current_train, 0)[0]
-            current_test = current_test - torch.min(current_train, 0)[0]
-            # pass
+            pass
+        current_train = current_train - torch.min(current_train, 0)[0]
+        current_test = current_test - torch.min(current_train, 0)[0]
         # unit normalization
         current_train = current_train / current_train.norm(dim=1, keepdim=True)
         current_test = current_test / current_test.norm(dim=1, keepdim=True)
@@ -98,6 +98,13 @@ def prepare_data(config, args, rf_parameters, data_name, current_train, current_
         kernel_fun = lambda x, y: kernel_var * polynomial_kernel(
             x, y, lengthscale=lengthscale, k=config['degree'], c=config['bias'])
 
+    # float conversion
+    current_train = current_train.float()
+    current_test = current_test.float()
+    train_labels = train_labels.float()
+    test_labels = test_labels.float()
+    mm = mm.float()
+    vv = vv.float()
     ref_kernel = kernel_fun(current_test[test_idxs], current_test[test_idxs])
 
     f_test_mean_ref, f_test_stds_ref = predictive_dist_exact(
@@ -250,13 +257,13 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
     del data_dict
     torch.cuda.empty_cache()
 
-    torch.cuda.synchronize()
+    # torch.cuda.synchronize()
     start = time.time()
 
     train_features = feature_encoder.forward(train_data_padded)
     test_features = feature_encoder.forward(test_data_padded)
 
-    torch.cuda.synchronize()
+    # torch.cuda.synchronize()
     feature_time = time.time() - start
 
     ### kernel approximation on a subset of the test data
@@ -286,7 +293,7 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
     test_var_mse = (f_test_stds_ref**2 - f_test_stds_est**2).pow(2).mean()
 
     ### gp prediction
-    torch.cuda.synchronize()
+    # torch.cuda.synchronize()
     start = time.time()
 
     if regression:
@@ -295,7 +302,7 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
             train_labels, train_label_vars
         )
         
-        torch.cuda.synchronize()
+        # torch.cuda.synchronize()
         prediction_time = time.time() - start
 
         f_test_mean += train_label_mean
@@ -306,7 +313,7 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
             num_samples=args.num_mc_samples
         )
 
-        torch.cuda.synchronize()
+        # torch.cuda.synchronize()
         prediction_time = time.time() - start
 
         test_predictions += train_label_mean
