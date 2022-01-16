@@ -238,7 +238,7 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
                                         degree=config['degree'], bias=config['bias'],
                                         projection_type=config['proj'], hierarchical=config['hierarchical'],
                                         complex_weights=config['complex_weights'], complex_real=comp_real,
-                                        full_cov=full_cov,
+                                        full_cov=full_cov, convolute_ts=(True if config['proj'].startswith('countsketch') else False),
                                         lengthscale=data_dict['lengthscale'], device=('cuda' if args.use_gpu else 'cpu'),
                                         var=data_dict['kernel_var'], ard=False, trainable_kernel=False)
         
