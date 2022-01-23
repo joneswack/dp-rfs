@@ -28,29 +28,30 @@ if __name__ == "__main__":
     results = []
 
     for idx, dataset in enumerate([
-        # ('EEG', '../datasets/export/eeg/pytorch/eeg.pth'),
+        ('EEG', '../datasets/export/eeg/pytorch/eeg.pth'),
         #('Adult', '../datasets/export/adult/pytorch/train_adult.pth'),
-        # ('Drive', '../datasets/export/drive/pytorch/drive.pth'),
+        ('Drive', '../datasets/export/drive/pytorch/drive.pth'),
         # ('Covertype', '../datasets/export/covtype/pytorch/covtype.pth'),
         (
             'CIFAR10 Conv',
             '../datasets/export/cifar10/pytorch/train_cifar10_resnet34_final.pth',
             '../datasets/export/cifar10/pytorch/test_cifar10_resnet34_final.pth'
         ),
-        # ('MNIST', '../datasets/export/mnist/pytorch/train_mnist.pth'),
+        ('MNIST', '../datasets/export/mnist/pytorch/train_mnist.pth'),
         # ('CIFAR10 Conv', '../datasets/export/conv_features/cifar10-train-inc-v3-2048.pth')
         # ('Fashion MNIST', '../datasets/export/fashion_mnist/pytorch/train_fashion_mnist.pth'),
         # ('Gisette', '../datasets/export/gisette/pytorch/train_gisette.pth')
     ]):
 
-        train_data = torch.load(dataset[1])
-        test_data = torch.load(dataset[2])
-        if len(train_data) == 2:
-            train_data, train_labels = train_data
-            test_data, test_labels = test_data
+        if len(dataset) == 3:
+            train_data, train_labels = torch.load(dataset[1])
+            test_data, train_labels = torch.load(dataset[2])
+        if len(dataset) == 2:
+            train_data, train_labels = torch.load(dataset[1])
+            #test_data, test_labels = test_data
 
         train_data = train_data.reshape(len(train_data), -1)
-        test_data = test_data.reshape(len(test_data), -1)
+        # test_data = test_data.reshape(len(test_data), -1)
 
         # train_data = train_data - train_data.mean(dim=0)
 
@@ -63,18 +64,21 @@ if __name__ == "__main__":
         min_val = torch.min(train_data, 0)[0]
         val_range = torch.max(train_data, 0)[0] - min_val
         val_range[val_range == 0] = 1
-        train_data = (train_data - min_val) / val_range
-        test_data = (test_data - min_val) / val_range
+        train_data = (train_data - min_val) #/ val_range
+        #test_data = (test_data - min_val) #/ val_range
 
-        indices = torch.randint(len(test_data), (1000,))
-        data = test_data[indices].float()
+        indices = torch.randint(len(train_data), (1000,))
+        #data = test_data[indices].float()
+        train_data = train_data[indices].float()
 
         # lengthscale = torch.cdist(train_data, train_data, p=2.).median()
-        lengthscale = np.sqrt(data.shape[1])
+        # lengthscale = np.sqrt(data.shape[1])
 
         # squared_prefactor_train = torch.exp(-train_data.pow(2).sum(dim=1))
 
-        #train_data = train_data / train_data.norm(dim=1, keepdim=True)
+        train_data = train_data / train_data.norm(dim=1, keepdim=True)
+
+        data = train_data
 
         power_2_pad = int(2**np.ceil(np.log2(data.shape[1])))
 
@@ -95,7 +99,7 @@ if __name__ == "__main__":
         #squared_prefactor = squared_prefactor_train.unsqueeze(1) * squared_prefactor_train.unsqueeze(0)
         squared_maclaurin_coefs = gaussian_kernel_coefs(np.array(degrees))**2
 
-        D = int(2.*train_data.shape[1])
+        D = int(2.*placeholder.shape[1])
 
         dataset_results = []
 
@@ -123,22 +127,22 @@ if __name__ == "__main__":
                 block_size=None
             )
 
-            # squared_errors = torch.zeros_like(ref_kernel)
+            squared_errors = torch.zeros_like(ref_kernel)
             
-            # for i in range(mc_samples):
-            #     if i % 100 == 0:
-            #         print('Sample {} / {}'.format(i+1, mc_samples))
-            #     torch.manual_seed(i)
-            #     np.random.seed(i)
+            for i in range(mc_samples):
+                if i % 100 == 0:
+                    print('Sample {} / {}'.format(i+1, mc_samples))
+                torch.manual_seed(i)
+                np.random.seed(i)
 
-            #     ts.resample()
-            #     y = ts.forward(placeholder)
-            #     # y = torch.cat([y.real, y.imag], dim=1)
-            #     approx_kernel = y @ y.t()
-            #     # approx_kernel *= squared_prefactor.sqrt() * np.sqrt(squared_maclaurin_coefs[degree-1])
-            #     squared_errors += (approx_kernel - ref_kernel).pow(2)
+                ts.resample()
+                y = ts.forward(placeholder)
+                # y = torch.cat([y.real, y.imag], dim=1)
+                approx_kernel = y @ y.t()
+                # approx_kernel *= squared_prefactor.sqrt() * np.sqrt(squared_maclaurin_coefs[degree-1])
+                squared_errors += (approx_kernel - ref_kernel).pow(2)
 
-            # squared_errors /= mc_samples
+            squared_errors /= mc_samples
 
             # ts_vars.append(squared_errors.mean())
 
@@ -146,15 +150,15 @@ if __name__ == "__main__":
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # gaussian_vars.append(degree_var.view(-1).numpy().mean())
 
-            # degree_var = var_rademacher_real(train_data, p=degree, D=D) # degree_var
+            # degree_var1 = var_rademacher_real(train_data, p=degree, D=D) # degree_var
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # rad_vars.append(degree_var.view(-1).numpy().mean())
 
-            # degree_var = var_rademacher_comp_real(train_data, p=degree, D=D//2.)
+            # degree_var2 = var_rademacher_comp_real(train_data, p=degree, D=D//2.)
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # comp_rad_vars.append(degree_var.view(-1).numpy().mean())
 
-            degree_var1, _ = var_tensor_srht_real(placeholder, p=degree, D=D, full_cov=True)
+            # degree_var1, _ = var_tensor_srht_real(placeholder, p=degree, D=D, full_cov=True)
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # srht_vars.append(degree_var.view(-1).numpy().mean())
 
@@ -162,7 +166,7 @@ if __name__ == "__main__":
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # comp_srht_vars.append(degree_var.view(-1).numpy().mean())
 
-            differences = degree_var2 / degree_var1 # squared_errors
+            differences = degree_var2 / squared_errors # squared_errors
             differences = differences[~(differences.isnan() | differences.isinf())]
             differences = differences.view(-1).sort(descending=False)[0]
 
@@ -172,5 +176,5 @@ if __name__ == "__main__":
 
         results.append((dataset, power_2_pad, dataset_results))
     
-    with open('saved_models/ecdf_plots/tensorsrht_ctr_r_minmax_test.pkl', 'wb') as handle:
+    with open('saved_models/ecdf_plots/tensorsrht_ctr_tensorsketch_r_norm.pkl', 'wb') as handle:
         pickle.dump(results, handle)
