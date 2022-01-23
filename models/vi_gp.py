@@ -265,16 +265,17 @@ class VariationalGP(nn.Module):
 
         for iteration in range(num_epochs):
             print('### Epoch: {} ###'.format(iteration))
-            if self.use_gpu:
-                torch.cuda.synchronize()
-            elapsed = time() - start_time
-            print('Time elapsed: {}'.format(elapsed))
 
             # kl_weight += delta_kl
             # kl_weight = 1. / (1. + np.exp(-a*(iteration - b)))
             kl_weight = gamma
 
             test_loss, test_mnll, test_kl, test_error = self.test_epoch(test_loader, kl_weight)
+
+            if self.use_gpu:
+                torch.cuda.synchronize()
+            elapsed = time() - start_time
+            print('Time elapsed: {}'.format(elapsed))
             
             print('Test Loss:', test_loss)
             print('Test MNLL:', test_mnll)

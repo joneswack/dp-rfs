@@ -27,7 +27,7 @@ def parse_args():
                         help='Training batch size')
     parser.add_argument('--epochs', type=int, required=False, default=50,
                         help='Training epochs')
-    parser.add_argument('--lr', type=float, required=False, default=1e-3,
+    parser.add_argument('--lr', type=float, required=False, default=1e-4,
                         help='Learning rate')
     parser.add_argument('--use_gpu', dest='use_gpu', action='store_true')
     parser.set_defaults(use_gpu=False)
