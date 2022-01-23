@@ -89,7 +89,7 @@ if __name__ == '__main__':
     for config in configurations:
         # we double the data dimension at every step
 
-        model_name = 'sgp_{}_proj_{}_deg_{}'.format(data_name, config['proj'], degree)
+        model_name = 'sgp_{}_proj_{}_deg_{}_compreal{}'.format(data_name, config['proj'], degree, config['comp_real'])
 
         datasets = {'train': TensorDataset(train_data, train_labels), 'test': TensorDataset(test_data, test_labels)}
         dataloaders = {
