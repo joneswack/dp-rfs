@@ -312,7 +312,7 @@ class VariationalGP(nn.Module):
                 optimizer.zero_grad()
                 loss, batch_nll, kl, n_correct = self.negative_lower_bound(
                     batch_data[0], batch_data[1],
-                    len(train_loader.dataset), kl_weight, mc_samples=1
+                    len(train_loader.dataset), kl_weight, mc_samples=10
                 )
                 loss.backward()
                 optimizer.step()
