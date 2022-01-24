@@ -124,6 +124,8 @@ if __name__ == '__main__':
         vgp = VariationalGP(D, n_classes, feature_encoder, trainable_vars=True, covariance='factorized', use_gpu=args.use_gpu)
         if args.use_gpu:
             vgp.cuda()
+
+        lr = 1e-5 if config['proj'].startswith('countsketch') else 1e-4
         vgp.optimize_lower_bound(model_name, dataloaders['train'], dataloaders['test'], num_epochs=args.epochs,
                                     lr=args.lr, a=0.5, b=10, gamma=1)
 
