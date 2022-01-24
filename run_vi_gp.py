@@ -102,6 +102,7 @@ if __name__ == '__main__':
         feature_encoder = PolynomialSketch(
             train_data.shape[1], D,
             degree=degree, bias=1,
+            var=train_labels.var(),
             lengthscale=1,
             projection_type=config['proj'],
             complex_weights=config['complex_weights'],
