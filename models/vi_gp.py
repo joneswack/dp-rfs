@@ -259,9 +259,7 @@ class VariationalGP(nn.Module):
             model_name, lr, num_epochs, datetime.now().strftime("%Y%m%d-%H%M%S"))
         summary_writer = SummaryWriter(log_dir)
 
-        if self.use_gpu:
-            torch.cuda.synchronize()
-        start_time = time()
+        total_training_time = 0
 
         for iteration in range(num_epochs):
             print('### Epoch: {} ###'.format(iteration))
@@ -271,11 +269,6 @@ class VariationalGP(nn.Module):
             kl_weight = gamma
 
             test_loss, test_mnll, test_kl, test_error = self.test_epoch(test_loader, kl_weight)
-
-            if self.use_gpu:
-                torch.cuda.synchronize()
-            elapsed = time() - start_time
-            print('Time elapsed: {}'.format(elapsed))
             
             print('Test Loss:', test_loss)
             print('Test MNLL:', test_mnll)
@@ -285,12 +278,16 @@ class VariationalGP(nn.Module):
             summary_writer.add_scalar('test_mnll', test_mnll, iteration)
             summary_writer.add_scalar('test_kl', test_kl, iteration)
             summary_writer.add_scalar('test_error', test_error, iteration)
-            summary_writer.add_scalar('time_elapsed', elapsed, iteration)
+            summary_writer.add_scalar('training_time', total_training_time, iteration)
 
             train_loss = 0
             train_nll = 0
             train_kl = 0
             train_correct = 0
+
+            if self.use_gpu:
+                torch.cuda.synchronize()
+            start_time = time()
 
             for _, batch_data in enumerate(train_loader):
                 if self.use_gpu:
@@ -340,6 +337,13 @@ class VariationalGP(nn.Module):
                 # loss.backward()
 
                 # optimizer.step(closure)
+
+            if self.use_gpu:
+                torch.cuda.synchronize()
+            elapsed = time() - start_time
+            print('Epoch time: {}'.format(elapsed))
+
+            total_training_time += elapsed
 
             train_loss /= len(train_loader)
             train_mnll = train_nll / len(train_loader.dataset)
