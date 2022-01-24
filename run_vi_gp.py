@@ -108,8 +108,8 @@ if __name__ == '__main__':
             complex_real=config['complex_real'],
             full_complex=False,
             full_cov=config['full_cov'],
-            convolute_ts=True if config['proj'].startswith('countsketch_scatter') else False,
-            trainable_kernel=True
+            convolute_ts=True if config['proj'].startswith('countsketch') else False,
+            trainable_kernel=False
         )
 
         if args.use_gpu:

@@ -286,6 +286,7 @@ class VariationalGP(nn.Module):
             train_correct = 0
 
             if self.use_gpu:
+                torch.cuda.empty_cache()
                 torch.cuda.synchronize()
             start_time = time()
 
