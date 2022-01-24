@@ -125,7 +125,7 @@ if __name__ == '__main__':
         if args.use_gpu:
             vgp.cuda()
 
-        lr = 1e-5 if config['proj'].startswith('countsketch') else 1e-4
+        #lr = 1e-5 if config['proj'].startswith('countsketch') else 1e-4
         vgp.optimize_lower_bound(model_name, dataloaders['train'], dataloaders['test'], num_epochs=args.epochs,
                                     lr=args.lr, a=0.5, b=10, gamma=1)
 

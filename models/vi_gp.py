@@ -247,7 +247,8 @@ class VariationalGP(nn.Module):
 
     def optimize_lower_bound(self, model_name, train_loader, test_loader,
                             num_epochs=10, lr=1e-3, a=0.5, b=50, gamma=1.0):
-        optimizer = torch.optim.Adam(self.parameters(), lr=lr)
+        # optimizer = torch.optim.Adam(self.parameters(), lr=lr)
+        optimizer = torch.optim.RMSprop(self.parameters(), lr=lr)
         # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=15, gamma=0.1)
         # optimizer = torch.optim.LBFGS(self.parameters(), lr=lr, max_iter=20, history_size=100)
         # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
