@@ -23,11 +23,11 @@ from random_features.rff import RFF
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--batch_size', type=int, required=False, default=64,
+    parser.add_argument('--batch_size', type=int, required=False, default=1000,
                         help='Training batch size')
     parser.add_argument('--epochs', type=int, required=False, default=50,
                         help='Training epochs')
-    parser.add_argument('--lr', type=float, required=False, default=1e-4,
+    parser.add_argument('--lr', type=float, required=False, default=1e-3,
                         help='Learning rate')
     parser.add_argument('--use_gpu', dest='use_gpu', action='store_true')
     parser.set_defaults(use_gpu=False)
@@ -126,9 +126,9 @@ if __name__ == '__main__':
         if args.use_gpu:
             vgp.cuda()
 
-        lr = 1e-4 if config['proj'].startswith('countsketch') else 1e-3
+        # lr = 1e-4 if config['proj'].startswith('countsketch') else 1e-3
         vgp.optimize_lower_bound(model_name, dataloaders['train'], dataloaders['test'], num_epochs=args.epochs,
-                                    lr=lr, a=0.5, b=10, gamma=1)
+                                    lr=args.lr, a=0.5, b=10, gamma=1)
 
         # for log_dict in log_dicts:
         #     log_handler.append(str(log_dict))
