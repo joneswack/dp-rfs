@@ -97,6 +97,8 @@ if __name__ == '__main__':
 
             model_name = 'sgp_{}_proj_{}_deg_{}_compreal{}'.format(data_name, config['proj'], degree, config['complex_real'])
 
+            print('Model:', model_name, 'Seed:', seed)
+
             datasets = {'train': TensorDataset(train_data, train_labels), 'test': TensorDataset(test_data, test_labels)}
             dataloaders = {
                 'train': torch.utils.data.DataLoader(datasets['train'], batch_size=args.batch_size,
