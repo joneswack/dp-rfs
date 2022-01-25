@@ -69,7 +69,7 @@ if __name__ == '__main__':
     # we use D=10d
     D = pow_2_shape * 10
     n_classes = train_labels.shape[1]
-    degree = 6
+    degree = 3
 
     print('Comparing approximations...')
 
