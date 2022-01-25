@@ -128,7 +128,7 @@ if __name__ == '__main__':
 
         lr = 1e-3 if config['proj'].startswith('countsketch') else 1e-2
         vgp.optimize_lower_bound(model_name, dataloaders['train'], dataloaders['test'], num_epochs=args.epochs,
-                                    lr=args.lr, a=0.5, b=10, gamma=1)
+                                    lr=args.lr, a=0.5, b=10, gamma=0)
 
         # for log_dict in log_dicts:
         #     log_handler.append(str(log_dict))
