@@ -29,6 +29,8 @@ def parse_args():
                         help='Training epochs')
     parser.add_argument('--lr', type=float, required=False, default=1e-3,
                         help='Learning rate')
+    parser.add_argument('--num_seeds', type=float, required=False, default=25,
+                        help='Number of random seeds')
     parser.add_argument('--use_gpu', dest='use_gpu', action='store_true')
     parser.set_defaults(use_gpu=False)
 
@@ -86,55 +88,59 @@ if __name__ == '__main__':
         {'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': True}
     ]
 
-    for config in configurations:
-        # we double the data dimension at every step
+    for seed in range(args.num_seeds):
+        torch.manual_seed(seed)
+        np.random.seed(seed)
 
-        model_name = 'sgp_{}_proj_{}_deg_{}_compreal{}'.format(data_name, config['proj'], degree, config['complex_real'])
+        for config in configurations:
+            # we double the data dimension at every step
 
-        datasets = {'train': TensorDataset(train_data, train_labels), 'test': TensorDataset(test_data, test_labels)}
-        dataloaders = {
-            'train': torch.utils.data.DataLoader(datasets['train'], batch_size=args.batch_size,
-                                                    shuffle=True, num_workers=0),
-            'test': torch.utils.data.DataLoader(datasets['test'], batch_size=args.batch_size,
-                                                    shuffle=False, num_workers=0)
-        }
+            model_name = 'sgp_{}_proj_{}_deg_{}_compreal{}'.format(data_name, config['proj'], degree, config['complex_real'])
 
-        feature_encoder = PolynomialSketch(
-            train_data.shape[1], D,
-            degree=degree, bias=1,
-            var=train_labels.var(),
-            lengthscale=1,
-            projection_type=config['proj'],
-            complex_weights=config['complex_weights'],
-            complex_real=config['complex_real'],
-            full_complex=False,
-            full_cov=config['full_cov'],
-            convolute_ts=True if config['proj'].startswith('countsketch') else False,
-            trainable_kernel=False
-        )
+            datasets = {'train': TensorDataset(train_data, train_labels), 'test': TensorDataset(test_data, test_labels)}
+            dataloaders = {
+                'train': torch.utils.data.DataLoader(datasets['train'], batch_size=args.batch_size,
+                                                        shuffle=True, num_workers=0),
+                'test': torch.utils.data.DataLoader(datasets['test'], batch_size=args.batch_size,
+                                                        shuffle=False, num_workers=0)
+            }
 
-        if args.use_gpu:
-            feature_encoder.cuda()
-        
-        with torch.no_grad():
-            feature_encoder.resample()
+            feature_encoder = PolynomialSketch(
+                train_data.shape[1], D,
+                degree=degree, bias=1,
+                var=train_labels.var(),
+                lengthscale=1,
+                projection_type=config['proj'],
+                complex_weights=config['complex_weights'],
+                complex_real=config['complex_real'],
+                full_complex=False,
+                full_cov=config['full_cov'],
+                convolute_ts=True if config['proj'].startswith('countsketch') else False,
+                trainable_kernel=False
+            )
 
-        if args.use_gpu:
-            feature_encoder.move_submodules_to_cuda()
+            if args.use_gpu:
+                feature_encoder.cuda()
+            
+            with torch.no_grad():
+                feature_encoder.resample()
 
-        vgp = VariationalGP(D, n_classes, feature_encoder, trainable_vars=True, covariance='factorized', use_gpu=args.use_gpu)
-        if args.use_gpu:
-            vgp.cuda()
+            if args.use_gpu:
+                feature_encoder.move_submodules_to_cuda()
 
-        # lr = 1e-3 if config['proj'].startswith('countsketch') else 1e-2
-        epochs = args.epochs if config['proj'].startswith('countsketch') else 3*args.epochs
-        vgp.optimize_lower_bound(model_name, dataloaders['train'], dataloaders['test'], num_epochs=epochs,
-                                    lr=args.lr, a=0.5, b=10, gamma=1)
+            vgp = VariationalGP(D, n_classes, feature_encoder, trainable_vars=True, covariance='factorized', use_gpu=args.use_gpu)
+            if args.use_gpu:
+                vgp.cuda()
 
-        # for log_dict in log_dicts:
-        #     log_handler.append(str(log_dict))
-        #     csv_handler.append(log_dict)
-        #     csv_handler.save()
+            # lr = 1e-3 if config['proj'].startswith('countsketch') else 1e-2
+            epochs = args.epochs if config['proj'].startswith('countsketch') else 6*args.epochs
+            vgp.optimize_lower_bound(model_name, dataloaders['train'], dataloaders['test'], num_epochs=epochs,
+                                        lr=args.lr, a=0.5, b=10, gamma=1)
+
+            # for log_dict in log_dicts:
+            #     log_handler.append(str(log_dict))
+            #     csv_handler.append(log_dict)
+            #     csv_handler.save()
 
     print('Total execution time: {:.2f}'.format(time.time()-start_time))
     print('Done!')
