@@ -71,7 +71,7 @@ if __name__ == '__main__':
     # we use D=10d
     D = pow_2_shape * 10
     n_classes = train_labels.shape[1]
-    degree = 3
+    degree = 6
 
     print('Comparing approximations...')
 
@@ -118,7 +118,7 @@ if __name__ == '__main__':
                 full_complex=False,
                 full_cov=config['full_cov'],
                 convolute_ts=True if config['proj'].startswith('countsketch') else False,
-                trainable_kernel=False
+                trainable_kernel=True
             )
 
             if args.use_gpu:
@@ -135,7 +135,7 @@ if __name__ == '__main__':
                 vgp.cuda()
 
             # lr = 1e-3 if config['proj'].startswith('countsketch') else 1e-2
-            epochs = args.epochs if config['proj'].startswith('countsketch') else 6*args.epochs
+            epochs = args.epochs if config['proj'].startswith('countsketch') else 3*args.epochs
             vgp.optimize_lower_bound(model_name, dataloaders['train'], dataloaders['test'], num_epochs=epochs,
                                         lr=args.lr, a=0.5, b=10, gamma=1)
 
