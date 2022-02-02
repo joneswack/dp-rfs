@@ -1,10 +1,29 @@
 # Random Features for Polynomial Kernels and Dot Product Kernels
 
-This repository contains PyTorch implementations of various random feature maps for polynomial and general dot product kernels. In particular, we provide implementations using complex random projections that can improve the kernel approximation significantly.
+This repository contains PyTorch implementations of various random feature maps for polynomial and general dot product kernels. In particular, we provide implementations using complex random projections that can improve the kernel approximation significantly. For dot product kernels, we provide an algorithm that minimizes the variance of the random feature approximation and can also be used in conjunction with the Gaussian kernel.
 
-The basic building block of random features for dot product kernels are polynomial sketches that approximate the polynomial kernel of degree *p*. Such random projections can be seen as an extension of the Johnson-Lindenstrauss Lemma to degree-*p* tensored versions of the input feature space. If *p=1*, these sketches reduce to linear random projections. Furthermore, they can be used to approximate the Gaussian kernel via a truncated Taylor series expansion.
+The basic building block of random features for dot product kernels are polynomial sketches that approximate the polynomial kernel of degree *p*. Such random projections can be seen as linear random projections applied to *p*-times self-tensored input features. If *p=1*, these sketches reduce to standard linear random projections.
 
-This repository implements and extends works from the following papers:
+For more information and a description of the novelties of this work, consult the associated technical reports:
+
+```bibtex
+@article{wacker2022a,
+  title={Improved Random Features for Dot Product Kernels},
+  author={Wacker, Jonas and Kanagawa, Motonobu and Filippone, Maurizio},
+  journal={arXiv preprint arXiv:2201.08712},
+  year={2022}
+}
+@article{wacker2022b,
+  title={Complex-to-Real Random Features for Polynomial Kernels},
+  author={Wacker, Jonas and Ohana, Ruben and Filippone, Maurizio},
+  journal={arXiv preprint},
+  year={2022}
+}
+```
+
+Please cite these works if you find them useful.
+
+In addition, this repository implements and extends works from the following related papers:
 
 * [Random Feature Maps for Dot Product Kernels](http://proceedings.mlr.press/v22/kar12/kar12.pdf)
 * [Fast and Scalable Polynomial Kernels via
@@ -15,7 +34,6 @@ Explicit Feature Maps](https://chbrown.github.io/kdd-2013-usb/kdd/p239.pdf)
 * [Orthogonal Random Features](https://papers.nips.cc/paper/2016/file/53adaf494dc89ef7196d73636eb2451b-Paper.pdf)
 * [The Unreasonable Effectiveness of Structured
 Random Orthogonal Embeddings](https://arxiv.org/pdf/1703.00864.pdf)
-* [Improved Random Features for Dot Product Kernels](https://arxiv.org/pdf/2201.08712.pdf)
 
 ## Requirements
 
@@ -23,7 +41,7 @@ We recommend:
 
 * Python 3.6 or higher
 * PyTorch 1.8 or higher
-* For GPU support: CUDA 10.2 or higher
+* For GPU support: CUDA 9.0 or higher
 
 Multiple complex operations on tensors that we use in our code have been introduced in PyTorch version 1.8.
 In case you have a lower version, you cannot use the complex projections in our code.
@@ -60,7 +78,7 @@ feature_encoder = PolynomialSketch(
     projection_type='gaussian'/'rademacher'/'srht'/'countsketch_scatter',
     complex_weights=False/True, # whether to use complex random projections (without complex_real outputs are complex-valued)
     complex_real=False/True, # whether to use complex-to-real sketches (outputs are real-valued)
-    hierarchical=False/True, # see <https://arxiv.org/abs/1909.01410>
+    hierarchical=False/True, # whether to use hierarchical sketching as proposed in <https://arxiv.org/abs/1909.01410>
     device='cpu'/'cuda', # whether to use CPU or GPU
 )
 
@@ -70,7 +88,7 @@ feature_encoder.forward(input_data) # project input data
 
 `projection_type` has a strong impact on the approximation quality and computation speed. `projection_type='srht'` uses the subsampled randomized Hadamard transform that makes use of structured matrix products. These are faster (especially on the GPU). They also give lower variances than Rademacher and Gaussian sketches most of the time. `countsketch_scatter` uses CountSketches as the base projection to yield TensorSketch (<https://chbrown.github.io/kdd-2013-usb/kdd/p239.pdf>).
 
-Depending on the scaling of your data, high-degree sketches can give very large variances. `complex_weights` usually improve the approximation significantly in this case. `hierarchical` sketches (<https://arxiv.org/abs/1909.01410>) can be helpful too.
+Depending on the scaling of your data, high-degree sketches can give very large variances. `complex_weights` usually improve the approximation significantly in this case. `hierarchical` sketches (<https://arxiv.org/abs/1909.01410>) are not the focus of this work, but can be helpful too.
 Complex random features can be computed about as fast as real ones, in particular when using `projection_type='srht'`. However, the downstream task is usually more expensive when working with complex data. Complex-to-Real (CtR) (`complex_real=True`) sketches return real-valued random features instead and thus alleviate this problem.
 
 ### Spherical Random Features (SRF)
@@ -125,22 +143,3 @@ python run_rf_gp_experiments.py --rf_parameter_file [rf_parameter_config] --data
 The output logs of the experiments are saved in the csv and logs folder.
 
 The bar plots can be created from the csv files using the Jupyter notebook `notebooks/bar-plot-visualization.ipynb`.
-
-## Cite our work
-
-If you find this repository useful, please cite our works:
-
-```bibtex
-@article{wacker2022a,
-  title={Improved Random Features for Dot Product Kernels},
-  author={Wacker, Jonas and Kanagawa, Motonobu and Filippone, Maurizio},
-  journal={arXiv preprint arXiv:2201.08712},
-  year={2022}
-}
-@article{wacker2022b,
-  title={Complex-to-Real Random Features for Polynomial Kernels},
-  author={Wacker, Jonas and Ohana, Ruben and Filippone, Maurizio},
-  journal={arXiv preprint},
-  year={2022}
-}
-```
