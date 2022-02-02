@@ -2,7 +2,7 @@
 
 This repository contains PyTorch implementations of various random feature maps for polynomial and general dot product kernels. In particular, we provide implementations using complex random projections that can improve the kernel approximation significantly. For dot product kernels, we provide an algorithm that minimizes the variance of the random feature approximation and can also be used in conjunction with the Gaussian kernel.
 
-The basic building block of random features for dot product kernels are polynomial sketches that approximate the polynomial kernel of degree *p*. Such random projections can be seen as linear random projections applied to *p*-times self-tensored input features. If *p=1*, these sketches reduce to standard linear random projections.
+The basic building block of random features for dot product kernels are Polynomial Sketches that approximate the polynomial kernel of degree *p*. Such random projections can be seen as linear random projections applied to *p*-times self-tensored input features. If *p=1*, these sketches reduce to standard linear random projections.
 
 For more information and a description of the novelties of this work, consult the associated technical reports:
 
@@ -62,9 +62,9 @@ We used cuda version 9.0 in our experiments but other versions should work too.
 
 ## Getting started
 
-### Polynomial sketches
+### Polynomial Sketches
 
-A polynomial sketch can be used on its own or as a module inside a larger deep learning framework.
+A Polynomial Sketch is a random feature approximation of the polynomial kernel. It can be used on its own or as a module inside a larger deep learning framework.
 It is initialized as follows:
 
 ```python
@@ -95,9 +95,9 @@ Complex random features can be computed about as fast as real ones, in particula
 
 We also provide an implementation of [Spherical Random Features for polynomial kernels](https://papers.nips.cc/paper/2015/file/f7f580e11d00a75814d2ded41fe8e8fe-Paper.pdf). They can be run similar to the above code but the random feature distribution needs to be optimized first. Please have a look at the code at the bottom of `random_features/spherical.py` to understand the procedure for obtaining this distribution and the random feature map afterwards. Once the distribution is obtained, it is saved under `saved_models` (some parameterizations are contained in this repository already).
 
-### Approximating the Gaussian kernel using polynomial sketches
+### Approximating the Gaussian kernel using Polynomial Sketches
 
-The Gaussian kernel can be approximated well through a randomized Maclaurin expansion with polynomial sketches assuming that the data is zero-centered and a proper lengthscale is used.
+The Gaussian kernel can be approximated well through a randomized Maclaurin expansion with Polynomial Sketches assuming that the data is zero-centered and a proper lengthscale is used.
 
 Note: This method is not implemented for Complex-to-Real (CtR) sketches yet.
 
@@ -114,8 +114,9 @@ feature_encoder = GaussianApproximator(
     var=kernel_var, # variance of the Gaussian kernel
     method='maclaurin', # approximation method (other possibilities: rff/poly_sketch)
     projection_type='gaussian'/'rademacher'/'srht'/'countsketch_scatter',
-    hierarchical=False/True,
-    complex_weights=False/True
+    complex_weights=False/True, # whether to use complex random projections (without complex_real outputs are complex-valued)
+    hierarchical=False/True, # whether to use hierarchical sketching as proposed in <https://arxiv.org/abs/1909.01410>
+    device='cpu'/'cuda', # whether to use CPU or GPU
 )
 
 # find optimal sampling distribution when using optimized maclaurin
@@ -127,6 +128,10 @@ feature_encoder.forward(input_data) # project input data
 Here, we chose the optimized Maclaurin method (`method='maclaurin'`).
 `initialize_sampling_distribution` finds the optimal random feature distribtion between degrees `min_sampling_degree=2` and `approx_degree=10`. `method='rff'` (random Fourier features) and `method='poly_sketch'` do not require this step.
 `method='maclaurin_p'` gives the Maclaurin approximation according to <http://proceedings.mlr.press/v22/kar12/kar12.pdf>, which is less optimal than the optimized Maclaurin method but requires no preprocessing.
+
+### Approximating other Dot Product Kernels using the Maclaurin method
+
+The `GaussianApproximator` module above is a thin wrapper of the Maclaurin module contained in `random_features.maclaurin`. When approximating a general dot product kernel, e.g., the exponential dot product kernel, we do not need this wrapper, but use the Maclaurin module directly.
 
 ## Reproducing the Gaussian Process Classification/Regression experiments
 
