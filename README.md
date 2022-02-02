@@ -131,7 +131,7 @@ Here, we chose the optimized Maclaurin method (`method='maclaurin'`).
 
 ### Approximating other Dot Product Kernels using the Maclaurin method
 
-The `GaussianApproximator` module above is a thin wrapper of the Maclaurin module contained in `random_features.maclaurin`. When approximating a general dot product kernel, e.g., the exponential dot product kernel, we do not need this wrapper, but use the Maclaurin module directly.
+The `GaussianApproximator` module above is a thin wrapper of the Maclaurin module contained in `random_features.maclaurin`. When approximating a general dot product kernel, e.g., the exponential dot product kernel, we do not need this wrapper, but use the Maclaurin module directly. Follow the code inside `GaussianApproximator` to see how the `Maclaurin` module is used.
 
 ## Reproducing the Gaussian Process Classification/Regression experiments
 
