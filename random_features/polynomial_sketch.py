@@ -1,10 +1,10 @@
-from numpy.core.numeric import full
 import torch
 import numpy as np
 import sys, os
 sys.path.append(os.path.join(os.path.dirname(__file__), "../"))
 
 from random_features.projections import CountSketch, OSNAP, SRHT, RademacherTransform, GaussianTransform
+from util.data import pad_data_pow_2
 
 
 class SketchNode:
@@ -117,12 +117,12 @@ def construct_sketch_tree(projection, degree, d_in, d_features, srht=False):
 
 class PolynomialSketch(torch.nn.Module):
     """
-    The basic polynomial sketch (xTy + b)^p with bias b and degree p.
+    The basic polynomial sketch (xTy/l^2 + b)^p with lengthscale l, bias b and degree p.
     """
 
     def __init__(self, d_in, d_features, degree=2, bias=0, lengthscale='auto', var=1.0, ard=False, trainable_kernel=False,
                     device='cpu', projection_type='countsketch_sparse', hierarchical=False, complex_weights=False,
-                    complex_real=False, full_complex=False, full_cov=True, convolute_ts=False, block_size=None, dtype=torch.FloatTensor):
+                    complex_real=False, full_cov=True, num_osnap_samples=10):
         """
         d_in: Data input dimension
         d_features: Projection dimension
@@ -130,11 +130,14 @@ class PolynomialSketch(torch.nn.Module):
         bias: The bias b (eventually added through input modifiction)
         lengthscale: Downscale of the inputs (1 if none)
         var: Scale of the final kernel
-        ard: Automatic Relevance Determination = individual lengthscale/input dim.
-        trainable_kernel: Learnable bias, lengthscales, scale
+        ard: Automatic Relevance Determination = individual lengthscale per input dimension
+        trainable_kernel: Learnable bias, lengthscales, kernel variance
         projection_type: rademacher/gaussian/srht/countsketch_sparse/countsketch_dense/countsketch_scatter
         hierarchical: Whether to use hierarchical sketches (overcomes exponential variances w.r.t. p but is not always better)
         complex_weights: Whether to use complex-valued weights (almost always lower variances but more expensive)
+        complex_real: Whether to use Complex-to-Real (CtR) sketches, the same as complex_weights but with a real transformation in the end
+        num_osnap_samples: Only for projection_type='osnap' - Number of times each input coordinate is allocated to a random index (out of d_features)
+        device: cpu or cuda
         """
         super(PolynomialSketch, self).__init__()
         self.d_in = d_in
@@ -146,9 +149,9 @@ class PolynomialSketch(torch.nn.Module):
         self.projection_type = projection_type
         self.hierarchical = hierarchical
         self.complex_weights = (complex_weights or complex_real)
-        self.full_complex = full_complex
-        self.convolute_ts = convolute_ts
+        self.convolute_ts = True if self.projection_type.startswith('countsketch') else False
         self.complex_real = complex_real
+        self.num_osnap_samples = num_osnap_samples
 
         # we initialize the kernel hyperparameters
         self.log_bias = None
@@ -173,10 +176,10 @@ class PolynomialSketch(torch.nn.Module):
             projection = lambda d_in, d_out: GaussianTransform(d_in, d_out, complex_weights=self.complex_weights, device=device)
         elif projection_type.split('_')[0] == 'countsketch':
             projection = lambda d_in, d_out: CountSketch(d_in, d_out, sketch_type=projection_type.split('_')[1],
-                complex_weights=self.complex_weights, full_complex=full_complex, device=device)
+                complex_weights=self.complex_weights, device=device)
         elif projection_type.split('_')[0] == 'osnap':
-            projection = lambda d_in, d_out: OSNAP(d_in, d_out, s=block_size, sketch_type=projection_type.split('_')[1],
-                complex_weights=self.complex_weights, full_complex=full_complex, device=device)
+            projection = lambda d_in, d_out: OSNAP(d_in, d_out, s=num_osnap_samples, sketch_type=projection_type.split('_')[1],
+                complex_weights=self.complex_weights, device=device)
 
         # the number of leaf nodes is p
         if self.hierarchical:
@@ -284,6 +287,8 @@ if __name__ == "__main__":
     # data, train_labels = torch.load('../datasets/export/fashion_mnist/pytorch/train_fashion_mnist.pth')
     data, train_labels = torch.load('../datasets/export/eeg/pytorch/eeg.pth')
     data = data.view(len(data), -1)
+    data = pad_data_pow_2(data)[:,:-1]
+    
     #data = data - data.mean(dim=0)
     indices = torch.randint(len(data), (1000,))
     data = data[indices]
@@ -295,9 +300,8 @@ if __name__ == "__main__":
     bias = 1.-2./a**2
     lengthscale = a / np.sqrt(2.)
     complex_weights = True
-    full_complex = True
     hierarchical = False
-    projection_type = 'countsketch_scatter'
+    projection_type = 'srht'
 
     ref_kernel = reference_kernel(data, degree, bias, log_lengthscale=np.log(lengthscale))
 
@@ -322,8 +326,7 @@ if __name__ == "__main__":
                 trainable_kernel=False,
                 projection_type=projection_type,
                 hierarchical=hierarchical,
-                complex_weights=complex_weights,
-                full_complex=full_complex
+                complex_weights=complex_weights
             )
             ts.resample()
             # features = tensorsketch(data, 2, 0, num_features=10000)

@@ -20,6 +20,10 @@ import util.data
 from random_features.polynomial_sketch import PolynomialSketch
 from random_features.rff import RFF
 
+"""
+Runs a Gaussian Process Classifier using Random Features with Stochastic Variational Inference (SVI)
+"""
+
 
 def parse_args():
     parser = argparse.ArgumentParser()

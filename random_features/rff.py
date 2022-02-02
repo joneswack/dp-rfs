@@ -11,14 +11,13 @@ from random_features.projections import SRHT, GaussianTransform
 class RFF(torch.nn.Module):
     """ Classical random Fourier features (optional SORF) """
     def __init__(self, d_in, d_features, lengthscale='auto', trainable_kernel=False,
-                    dtype=torch.FloatTensor, complex_weights=False, projection_type='srht'):
+                    complex_weights=False, projection_type='srht', device='cpu'):
         super(RFF, self).__init__()
 
         self.d_in = d_in
         self.d_features = d_features
         if not complex_weights:
             self.d_features = self.d_features // 2
-        self.dtype = dtype
         self.complex_weights = complex_weights
         self.projection_type = projection_type
 
@@ -26,13 +25,13 @@ class RFF(torch.nn.Module):
             lengthscale = np.sqrt(d_in)
         # we activate ARD
         self.log_lengthscale = torch.nn.Parameter(
-            torch.ones(d_in).type(dtype) * np.log(lengthscale), requires_grad=trainable_kernel)
+            torch.ones(d_in, device=device).type(torch.FloatTensor) * np.log(lengthscale), requires_grad=trainable_kernel)
 
         if self.projection_type == 'srht':
             self.feature_encoder = SRHT(self.d_in, self.d_features,
-                                        complex_weights=False, shuffle=False, k=3)
+                                        complex_weights=False, shuffle=False, k=3, device=device)
         else:
-            self.feature_encoder = GaussianTransform(self.d_in, self.d_features, complex_weights=False)
+            self.feature_encoder = GaussianTransform(self.d_in, self.d_features, complex_weights=False, device=device)
 
     def resample(self):
         self.feature_encoder.resample()

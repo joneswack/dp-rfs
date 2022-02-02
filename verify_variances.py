@@ -313,10 +313,7 @@ if __name__ == "__main__":
         trainable_kernel=False,
         projection_type='rademacher',
         hierarchical=False,
-        complex_weights=False,
-        full_cov=False,
-        convolute_ts=False,
-        blockwise=False
+        complex_weights=False
     )
 
     app_kernel_values = []

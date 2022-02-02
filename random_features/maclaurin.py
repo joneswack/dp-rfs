@@ -19,7 +19,7 @@ class Maclaurin(torch.nn.Module):
     def __init__(self, d_in, d_features, coef_fun,
                         module_args={'projection': 'srht', 'hierarchical': False, 'complex_weights': False},
                         measure=P_Measure(2, False, 10), bias=0., lengthscale='auto', var=1.0, ard=False,
-                        trainable_kernel=False, dtype=torch.FloatTensor, device='cpu'):
+                        trainable_kernel=False, device='cpu'):
         """
         d_in: Data input dimension
         d_features: Projection dimension
@@ -31,6 +31,7 @@ class Maclaurin(torch.nn.Module):
         var: Scale of the final kernel
         ard: Automatic Relevance Determination = individual lengthscale/input dim.
         trainable_kernel: Learnable bias, lengthscales, scale
+        device: cpu or cuda
         """
         super(Maclaurin, self).__init__()
 
@@ -57,7 +58,7 @@ class Maclaurin(torch.nn.Module):
 
         # we initialize the kernel hyperparameters
         if bias != 0:
-            self.log_bias = torch.nn.Parameter(torch.ones(1, device=device).type(dtype) * np.log(bias), requires_grad=trainable_kernel)
+            self.log_bias = torch.nn.Parameter(torch.ones(1, device=device).type(torch.FloatTensor) * np.log(bias), requires_grad=trainable_kernel)
             self.d_in = self.d_in + 1
         else:
             self.log_bias = None
@@ -66,10 +67,8 @@ class Maclaurin(torch.nn.Module):
             lengthscale = np.sqrt(d_in)
 
         num_lengthscales = d_in if ard else 1
-        self.log_lengthscale = torch.nn.Parameter(torch.ones(num_lengthscales, device=device).type(dtype) * np.log(lengthscale), requires_grad=trainable_kernel)
-        self.log_var = torch.nn.Parameter(torch.ones(1, device=device).type(dtype) * np.log(var), requires_grad=trainable_kernel)
-
-        self.dtype = dtype
+        self.log_lengthscale = torch.nn.Parameter(torch.ones(num_lengthscales, device=device).type(torch.FloatTensor) * np.log(lengthscale), requires_grad=trainable_kernel)
+        self.log_var = torch.nn.Parameter(torch.ones(1, device=device).type(torch.FloatTensor) * np.log(var), requires_grad=trainable_kernel)
 
     def expected_variances_and_biases(self, training_data, target_kernel, gaussian_kernel=False):
         """
@@ -263,7 +262,7 @@ class Maclaurin(torch.nn.Module):
             mod = PolynomialSketch(self.d_in, int(dim), degree=degree,
                                     bias=0, lengthscale=1.0, var=1.0, projection_type=proj,
                                     hierarchical=hier, complex_weights=complex_weights,
-                                    trainable_kernel=False, dtype=torch.FloatTensor)
+                                    trainable_kernel=False)
             mod.resample()
             self.modules.append(mod)
 
@@ -295,7 +294,7 @@ class Maclaurin(torch.nn.Module):
         add_features = None
 
         if self.measure.has_constant:
-            add_features = torch.tensor(self.coef_fun(0)).type(self.dtype).sqrt().repeat(len(x), 1)
+            add_features = torch.tensor(self.coef_fun(0)).type(torch.FloatTensor).sqrt().repeat(len(x), 1)
 
         if add_features is not None:
             if x.is_cuda:
@@ -303,7 +302,7 @@ class Maclaurin(torch.nn.Module):
 
             if self.measure.h01:
                 # we need to append the linear features
-                linear = torch.tensor(self.coef_fun(1)).type(self.dtype).sqrt() * x
+                linear = torch.tensor(self.coef_fun(1)).type(torch.FloatTensor).sqrt() * x
                 add_features = torch.cat([add_features, linear], dim=1)
 
             if self.module_args['complex_weights']:

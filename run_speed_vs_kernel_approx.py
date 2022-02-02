@@ -1,6 +1,5 @@
 import torch
 from random_features.polynomial_sketch import PolynomialSketch
-from random_features.fast_tensor_srht import FastTensorSRHT
 import util.data
 
 import numpy as np
@@ -13,6 +12,10 @@ from tqdm import tqdm
 device = 'cuda'
 repetitions = 100
 torch.manual_seed(0)
+
+"""
+Measures Random Feature Computation Time vs. Kernel Approximation.
+"""
 
 # featuresdict_1 = {'2048': torch.load('saved_models/conv_features/cifar10-val-inc-v3-2048.pth')}
 #featuresdict_2 = {'2048': torch.load('saved_models/conv_features/cifar10-train-inc-v3-2048.pth')}

@@ -20,8 +20,8 @@ class GaussianApproximator(nn.Module):
     """
 
     def __init__(self, d_in, d_features, approx_degree=4, lengthscale='auto', var=1.0,
-                    ard=False, trainable_kernel=False, method='poly_sketch', dtype=torch.FloatTensor,
-                    projection_type='srht', hierarchical=False, complex_weights=False):
+                    ard=False, trainable_kernel=False, method='poly_sketch',
+                    projection_type='srht', hierarchical=False, complex_weights=False, device='cpu'):
         """
         d_in: Data input dimension
         d_features: Projection dimension
@@ -48,14 +48,15 @@ class GaussianApproximator(nn.Module):
         self.d_in = d_in
         self.d_features = d_features
         self.approx_degree = approx_degree
+        self.device = device
         
         if isinstance(lengthscale, str) and lengthscale == 'auto':
             # alternatively, we can simply set it to one
             lengthscale = np.sqrt(d_in)
 
         num_lengthscales = d_in if ard else 1
-        self.log_lengthscale = torch.nn.Parameter(torch.ones(num_lengthscales).type(dtype) * np.log(lengthscale), requires_grad=trainable_kernel)
-        self.log_var = torch.nn.Parameter(torch.ones(1).type(dtype) * np.log(var), requires_grad=trainable_kernel)
+        self.log_lengthscale = torch.nn.Parameter(torch.ones(num_lengthscales, device=device).type(torch.FloatTensor) * np.log(lengthscale), requires_grad=trainable_kernel)
+        self.log_var = torch.nn.Parameter(torch.ones(1, device=device).type(torch.FloatTensor) * np.log(var), requires_grad=trainable_kernel)
 
         self.method = method
         self.projection_type = projection_type
@@ -76,7 +77,7 @@ class GaussianApproximator(nn.Module):
                                     'complex_weights': complex_weights
                                 },
                                 # the RF hyperparameters are fixed for this module
-                                bias=0., lengthscale=1, trainable_kernel=False)
+                                bias=0., lengthscale=1, trainable_kernel=False, device=device)
         elif method == 'maclaurin_p':
             # classical maclaurin with exponentially decaying measure (Kar & Karnick 2012)
             kernel_coefs = lambda x: Exponential_Measure.coefs(x)
@@ -89,7 +90,7 @@ class GaussianApproximator(nn.Module):
                                     'complex_weights': complex_weights
                                 },
                                 # the RF hyperparameters are fixed for this module
-                                bias=0., lengthscale=1, trainable_kernel=False)
+                                bias=0., lengthscale=1, trainable_kernel=False, device=device)
         elif method == 'poly_sketch':
             # exp(x.T y) is approximated through (x.T y / (approx_degree*lengthscale**2) + 1)^approx_degree
             # the lengthscale is set inside the forward pass of THIS module
@@ -97,10 +98,10 @@ class GaussianApproximator(nn.Module):
             self.feature_encoder = PolynomialSketch(d_in, d_features, degree=approx_degree,
                                 bias=1, lengthscale=np.sqrt(approx_degree),
                                 trainable_kernel=False, projection_type=projection_type,
-                                complex_weights=complex_weights)
+                                complex_weights=complex_weights, device=device)
         elif method == 'rff':
             self.feature_encoder = RFF(d_in, d_features, lengthscale=1, trainable_kernel=False,
-                                complex_weights=complex_weights, projection_type=projection_type)
+                                complex_weights=complex_weights, projection_type=projection_type, device=device)
         else:
             raise RuntimeError('Method {} not available!'.format(method))
 

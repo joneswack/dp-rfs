@@ -127,7 +127,7 @@ feature_encoder.forward(input_data) # project input data
 
 Here, we chose the optimized Maclaurin method (`method='maclaurin'`).
 `initialize_sampling_distribution` finds the optimal random feature distribtion between degrees `min_sampling_degree=2` and `approx_degree=10`. `method='rff'` (random Fourier features) and `method='poly_sketch'` do not require this step.
-`method='maclaurin_p'` gives the Maclaurin approximation according to <http://proceedings.mlr.press/v22/kar12/kar12.pdf>, which is less optimal than the optimized Maclaurin method but requires no preprocessing.
+`method='maclaurin_p'` gives the Maclaurin approximation according to [(Kar and Karnick, 2012)](http://proceedings.mlr.press/v22/kar12/kar12.pdf), which is less optimal than the optimized Maclaurin method but requires no preprocessing.
 
 ### Approximating other Dot Product Kernels using the Maclaurin method
 

@@ -18,6 +18,10 @@ from util.helper_functions import classification_scores, regression_scores
 from util.kernels import gaussian_kernel, polynomial_kernel
 from util.measures import Fixed_Measure, Polynomial_Measure, P_Measure
 
+"""
+Runs Gaussian Process Classification experiments as closed form GP regression on transformed labels.
+"""
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--rf_parameter_file', type=str, required=False, default='config/rf_parameters/poly3_ctr.json',
@@ -182,8 +186,8 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
             complex_weights=config['complex_weights']
         )
 
-        if args.use_gpu:
-            feature_encoder.cuda()
+        # if args.use_gpu:
+        #     feature_encoder.cuda()
         feature_encoder.initialize_sampling_distribution(train_data_padded[train_idxs],
             min_sampling_degree=rf_params['min_sampling_degree'])
     # otherwise we use the polynomial kernel
@@ -221,8 +225,8 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
 
         if config['method'] == 'maclaurin':
             # optimized maclaurin
-            if args.use_gpu:
-                feature_encoder.cuda()
+            # if args.use_gpu:
+            #     feature_encoder.cuda()
             random_samples = train_data_padded[train_idxs]
             target_kernel = polynomial_kernel(
                 random_samples, lengthscale=feature_encoder.log_lengthscale.exp(),
@@ -238,8 +242,8 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
                                         degree=config['degree'], bias=config['bias'],
                                         projection_type=config['proj'], hierarchical=config['hierarchical'],
                                         complex_weights=config['complex_weights'], complex_real=comp_real,
-                                        full_cov=full_cov, convolute_ts=(True if config['proj'].startswith('countsketch') else False),
-                                        lengthscale=data_dict['lengthscale'], device=('cuda' if args.use_gpu else 'cpu'),
+                                        full_cov=full_cov, lengthscale=data_dict['lengthscale'],
+                                        device=('cuda' if args.use_gpu else 'cpu'),
                                         var=data_dict['kernel_var'], ard=False, trainable_kernel=False)
         
     if config['method'] == 'srf':
@@ -247,14 +251,15 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
     else:
         feature_encoder.resample()
 
-    if args.use_gpu:
-        if isinstance(feature_encoder, GaussianApproximator):
-            feature_encoder.feature_encoder.cuda()
-            if config['method'] != 'rff':
-                feature_encoder.feature_encoder.move_submodules_to_cuda()
-        else:
-            feature_encoder.cuda()
-            feature_encoder.move_submodules_to_cuda()
+    # if args.use_gpu:
+    #     if isinstance(feature_encoder, GaussianApproximator):
+    #         feature_encoder.feature_encoder.cuda()
+    #         if config['method'] != 'rff':
+    #             feature_encoder.feature_encoder.move_submodules_to_cuda()
+    #     else:
+            # pass
+            #feature_encoder.cuda()
+            #feature_encoder.move_submodules_to_cuda()
 
     het_gp = HeteroskedasticGP(None)
 
