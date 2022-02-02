@@ -28,9 +28,11 @@ if __name__ == "__main__":
     results = []
 
     for idx, dataset in enumerate([
-        ('EEG', '../datasets/export/eeg/pytorch/eeg.pth'),
+        # ('EEG', '../datasets/export/eeg/pytorch/eeg.pth'),
         #('Adult', '../datasets/export/adult/pytorch/train_adult.pth'),
-        ('Drive', '../datasets/export/drive/pytorch/drive.pth'),
+        # ('Drive', '../datasets/export/drive/pytorch/drive.pth'),
+        ('Letter', '../datasets/export/letter/pytorch/letter.pth'),
+        ('Mocap', '../datasets/export/mocap/pytorch/mocap.pth'),
         # ('Covertype', '../datasets/export/covtype/pytorch/covtype.pth'),
         (
             'CIFAR10 Conv',
@@ -55,8 +57,8 @@ if __name__ == "__main__":
 
         # train_data = train_data - train_data.mean(dim=0)
 
-        torch.manual_seed(42)
-        np.random.seed(42)
+        torch.manual_seed(0) # 42
+        np.random.seed(0) # 42
 
         # if dataset[0] == 'MNIST':
         # min/max-scaling

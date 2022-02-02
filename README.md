@@ -1,9 +1,8 @@
-# Beyond Random Fourier Features: Improved Random Sketches for Dot Product Kernels
+# Random Features for Polynomial Kernels and Dot Product Kernels
 
-This repository contains PyTorch implementations of various random feature maps for polynomial and general dot product kernels. In particular, we provide implementations for complex-valued features that improve the kernel approximation significantly.
-Furthermore, it allows to reproduce the Gaussian Process experiments from the associated paper: ...
+This repository contains PyTorch implementations of various random feature maps for polynomial and general dot product kernels. In particular, we provide implementations using complex random projections that can improve the kernel approximation significantly.
 
-The basic building block of random features for dot product kernels are polynomial sketches that approximate the polynomial kernel of degree *p*. Such random projections can be seen as an extension of the Johnson-Lindenstrauss Lemma to degree-*p* tensored versions of the input feature space and are therefore quite general. If *p=1*, these sketches reduce to linear random projections. Furthermore, they can be used to approximate the Gaussian kernel via a truncated Taylor series expansion.
+The basic building block of random features for dot product kernels are polynomial sketches that approximate the polynomial kernel of degree *p*. Such random projections can be seen as an extension of the Johnson-Lindenstrauss Lemma to degree-*p* tensored versions of the input feature space. If *p=1*, these sketches reduce to linear random projections. Furthermore, they can be used to approximate the Gaussian kernel via a truncated Taylor series expansion.
 
 This repository implements and extends works from the following papers:
 
@@ -16,6 +15,7 @@ Explicit Feature Maps](https://chbrown.github.io/kdd-2013-usb/kdd/p239.pdf)
 * [Orthogonal Random Features](https://papers.nips.cc/paper/2016/file/53adaf494dc89ef7196d73636eb2451b-Paper.pdf)
 * [The Unreasonable Effectiveness of Structured
 Random Orthogonal Embeddings](https://arxiv.org/pdf/1703.00864.pdf)
+* [Improved Random Features for Dot Product Kernels](https://arxiv.org/pdf/2201.08712.pdf)
 
 ## Requirements
 
@@ -28,29 +28,19 @@ We recommend:
 Multiple complex operations on tensors that we use in our code have been introduced in PyTorch version 1.8.
 In case you have a lower version, you cannot use the complex projections in our code.
 
-This code was tested on a Google Colab instance using Python version 3.7.1, PyTorch 1.9 (with CUDA 10.2) on an NVIDIA Tesla V100 graphics card with 16GB RAM. Depending on the size of the dataset and the projection dimension, much less RAM may be sufficient.
-
 ### A note on using GPU-accelerated SRHT sketches
 
-PyTorch does not natively support the Fast Walsh Hadamard Transform. This repository contains an implementation including CUDA kernel in `util/fwht`. This kernel is needed for GPU-accelerated TensorSRHT sketches.
-If you want to use this implementation, you also need to have CUDA **10.1** installed.
-
-Then you run the following command in your terminal prior to launching any other code:
-
-```sh
-export CUDA_HOME=<path to your cuda-10.1 installation> (usually /usr/local/cuda-10.1)
-```
-
-If you do not need GPU acceleration for TensorSRHT, comment out the following lines from `util/fwht/__init__.py`:
-
+PyTorch does not natively support the Fast Walsh Hadamard Transform. This repository contains an implementation including a CUDA kernel in `util/hadamard_cuda`. This kernel is needed for GPU-accelerated TensorSRHT sketches.
+If you want to use this implementation, you need to specify your cuda path inside `util/fwht/__init__.py` for its compilation:
 ```python
 if torch.cuda.is_available():
     sources.extend([filedir + 'fwht_kernel.cu'])
     flags.extend(['-DIS_CUDA_AVAILABLE'])
     if os.environ.get('CUDA_HOME', '-1') == '-1':
-        warnings.warn('CUDA_HOME variable not set. Setting CUDA_HOME=/usr/local/cuda-10.1...',)
-        os.environ['CUDA_HOME'] = '/usr/local/cuda-10.1'
+        warnings.warn('CUDA_HOME variable not set. Setting CUDA_HOME=/usr/local/cuda-9.0...',)
+        os.environ['CUDA_HOME'] = '/usr/local/cuda-9.0'
 ```
+We used cuda version 9.0 in our experiments but other versions should work too.
 
 ## Getting started
 
@@ -68,22 +58,20 @@ feature_encoder = PolynomialSketch(
     bias=bias, # bias parameter of the polynomial kernel
     lengthscale=lengthscale, # inverse scale of the data (like lengthscale for Gaussian kernel)
     projection_type='gaussian'/'rademacher'/'srht'/'countsketch_scatter',
-    hierarchical=False/True,
-    complex_weights=False/True
+    complex_weights=False/True, # whether to use complex random projections (without complex_real outputs are complex-valued)
+    complex_real=False/True, # whether to use complex-to-real sketches (outputs are real-valued)
+    hierarchical=False/True, # see <https://arxiv.org/abs/1909.01410>
+    device='cpu'/'cuda', # whether to use CPU or GPU
 )
 
 feature_encoder.resample() # initialize random feature sample
-feature_encoder.cuda() # only for GPU
-feature_encoder.move_submodules_to_cuda() # only for GPU
 feature_encoder.forward(input_data) # project input data
 ```
 
-`projection_type` has a strong impact on the approximation quality and computation speed. `projection_type='srht'` uses the subsampled randomized Hadamard transform that makes use of structured matrix products. These are faster (especially on the GPU). They also give lower variances for odd degrees than Rademacher and Gaussian sketches.
+`projection_type` has a strong impact on the approximation quality and computation speed. `projection_type='srht'` uses the subsampled randomized Hadamard transform that makes use of structured matrix products. These are faster (especially on the GPU). They also give lower variances than Rademacher and Gaussian sketches most of the time. `countsketch_scatter` uses CountSketches as the base projection to yield TensorSketch (<https://chbrown.github.io/kdd-2013-usb/kdd/p239.pdf>).
 
 Depending on the scaling of your data, high-degree sketches can give very large variances. `complex_weights` usually improve the approximation significantly in this case. `hierarchical` sketches (<https://arxiv.org/abs/1909.01410>) can be helpful too.
-Complex random features can be computed about as fast as real ones, but the cost of the downstream task is usually higher. Hierarchical sketches are more expensive to construct but have the same downstream cost.
-
-At the bottom of `random_features/polynomial_sketch.py`, we show how to evaluate the unbiasedness of the approximation. You can directly run the script.
+Complex random features can be computed about as fast as real ones, in particular when using `projection_type='srht'`. However, the downstream task is usually more expensive when working with complex data. Complex-to-Real (CtR) (`complex_real=True`) sketches return real-valued random features instead and thus alleviate this problem.
 
 ### Spherical Random Features (SRF)
 
@@ -92,6 +80,8 @@ We also provide an implementation of [Spherical Random Features for polynomial k
 ### Approximating the Gaussian kernel using polynomial sketches
 
 The Gaussian kernel can be approximated well through a randomized Maclaurin expansion with polynomial sketches assuming that the data is zero-centered and a proper lengthscale is used.
+
+Note: This method is not implemented for Complex-to-Real (CtR) sketches yet.
 
 The approximator is initialized as follows:
 
@@ -110,18 +100,15 @@ feature_encoder = GaussianApproximator(
     complex_weights=False/True
 )
 
-# find optimal sampling distribution using optimized maclaurin
+# find optimal sampling distribution when using optimized maclaurin
 feature_encoder.initialize_sampling_distribution(input_data_sample, min_sampling_degree=2)
-
 feature_encoder.resample() # initialize random feature sample
-feature_encoder.feature_encoder.cuda() # only for GPU
-feature_encoder.feature_encoder.move_submodules_to_cuda() # only for GPU
 feature_encoder.forward(input_data) # project input data
 ```
 
 Here, we chose the optimized Maclaurin method (`method='maclaurin'`).
 `initialize_sampling_distribution` finds the optimal random feature distribtion between degrees `min_sampling_degree=2` and `approx_degree=10`. `method='rff'` (random Fourier features) and `method='poly_sketch'` do not require this step.
-`method='maclaurin_p'` gives the Maclaurin approximation according to <http://proceedings.mlr.press/v22/kar12/kar12.pdf> if benchmarking is desired.
+`method='maclaurin_p'` gives the Maclaurin approximation according to <http://proceedings.mlr.press/v22/kar12/kar12.pdf>, which is less optimal than the optimized Maclaurin method but requires no preprocessing.
 
 ## Reproducing the Gaussian Process Classification/Regression experiments
 
@@ -133,7 +120,7 @@ Then run the following command:
 python run_rf_gp_experiments.py --rf_parameter_file [rf_parameter_config] --datasets_file config/active_datasets.json --use_gpu
 ```
 
-`--use_gpu` is optional. `[rf_parameter_config]` needs to be replaced by one of the files located in config/rf_parameters depending on whether the Gaussian or the degree 20 polynomial kernel should be approximated. These files can be easily adapted according to your needs.
+`--use_gpu` is optional. `[rf_parameter_config]` needs to be replaced by one of the files located in config/rf_parameters depending on which kernel should be approximated. These files can be easily adapted according to your needs.
 
 The output logs of the experiments are saved in the csv and logs folder.
 
@@ -141,16 +128,19 @@ The bar plots can be created from the csv files using the Jupyter notebook `note
 
 ## Cite our work
 
-If you find this repository helpful, feel free to cite our publication:
+If you find this repository useful, please cite our works:
 
 ```bibtex
-@inproceedings{wacker2021,
-    title = "Beyond Random Fourier Features: Improved Random Sketches for Dot Product Kernels",
-    author = "Wacker, Jonas and Kanagawa, Motonobu and Filippone, Maurizio",
-    booktitle = "",
-    month = "",
-    year = "2021",
-    publisher = "",
-    url = ""
+@article{wacker2022a,
+  title={Improved Random Features for Dot Product Kernels},
+  author={Wacker, Jonas and Kanagawa, Motonobu and Filippone, Maurizio},
+  journal={arXiv preprint arXiv:2201.08712},
+  year={2022}
+}
+@article{wacker2022b,
+  title={Complex-to-Real Random Features for Polynomial Kernels},
+  author={Wacker, Jonas and Ohana, Ruben and Filippone, Maurizio},
+  journal={arXiv preprint},
+  year={2022}
 }
 ```

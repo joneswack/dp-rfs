@@ -122,7 +122,7 @@ class PolynomialSketch(torch.nn.Module):
 
     def __init__(self, d_in, d_features, degree=2, bias=0, lengthscale='auto', var=1.0, ard=False, trainable_kernel=False,
                     device='cpu', projection_type='countsketch_sparse', hierarchical=False, complex_weights=False,
-                    complex_real=False, full_complex=False, full_cov=False, convolute_ts=False, block_size=None, dtype=torch.FloatTensor):
+                    complex_real=False, full_complex=False, full_cov=True, convolute_ts=False, block_size=None, dtype=torch.FloatTensor):
         """
         d_in: Data input dimension
         d_features: Projection dimension
