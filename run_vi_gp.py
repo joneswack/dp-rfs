@@ -122,17 +122,12 @@ if __name__ == '__main__':
                 full_complex=False,
                 full_cov=config['full_cov'],
                 convolute_ts=True if config['proj'].startswith('countsketch') else False,
-                trainable_kernel=True
+                trainable_kernel=True,
+                device=('cuda' if args.use_gpu else 'cpu')
             )
-
-            if args.use_gpu:
-                feature_encoder.cuda()
             
             with torch.no_grad():
                 feature_encoder.resample()
-
-            if args.use_gpu:
-                feature_encoder.move_submodules_to_cuda()
 
             vgp = VariationalGP(D, n_classes, feature_encoder, trainable_vars=True, covariance='factorized', use_gpu=args.use_gpu)
             if args.use_gpu:

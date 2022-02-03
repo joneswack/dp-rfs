@@ -185,9 +185,6 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
             projection_type=config['proj'], hierarchical=config['hierarchical'],
             complex_weights=config['complex_weights'], device=('cuda' if args.use_gpu else 'cpu')
         )
-
-        # if args.use_gpu:
-        #     feature_encoder.cuda()
         feature_encoder.initialize_sampling_distribution(train_data_padded[train_idxs],
             min_sampling_degree=rf_params['min_sampling_degree'])
     # otherwise we use the polynomial kernel
@@ -224,9 +221,6 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
                                     var=data_dict['kernel_var'], ard=False, trainable_kernel=False)
 
         if config['method'] == 'maclaurin':
-            # optimized maclaurin
-            # if args.use_gpu:
-            #     feature_encoder.cuda()
             random_samples = train_data_padded[train_idxs]
             target_kernel = polynomial_kernel(
                 random_samples, lengthscale=feature_encoder.log_lengthscale.exp(),
@@ -250,16 +244,6 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
         feature_encoder.resample(num_points_w=5000)
     else:
         feature_encoder.resample()
-
-    # if args.use_gpu:
-    #     if isinstance(feature_encoder, GaussianApproximator):
-    #         feature_encoder.feature_encoder.cuda()
-    #         if config['method'] != 'rff':
-    #             feature_encoder.feature_encoder.move_submodules_to_cuda()
-    #     else:
-            # pass
-            #feature_encoder.cuda()
-            #feature_encoder.move_submodules_to_cuda()
 
     het_gp = HeteroskedasticGP(None)
 
@@ -439,31 +423,31 @@ if __name__ == '__main__':
             float(noise_var_params['base'])**i for i in range(noise_var_params['min'], noise_var_params['max']+1)
         ]
         
-        # for noise_var in noise_vars:
-        #     # config, data_name, current_train, current_test, train_labels, test_labels, num_samples, noise_var, regression=False
-        #     with torch.no_grad():
-        #         try:
-        #             data_dict = prepare_data(baseline_config, args, rf_parameters,
-        #                 data_name, sub_data, val_data, sub_labels, val_labels,
-        #                 noise_var, regression=regression
-        #             )
+        for noise_var in noise_vars:
+            # config, data_name, current_train, current_test, train_labels, test_labels, num_samples, noise_var, regression=False
+            with torch.no_grad():
+                try:
+                    data_dict = prepare_data(baseline_config, args, rf_parameters,
+                        data_name, sub_data, val_data, sub_labels, val_labels,
+                        noise_var, regression=regression
+                    )
 
-        #             log_dir = run_rf_gp(data_dict, d_features, baseline_config, args, rf_parameters, 0)
-        #         except Exception as e:
-        #             print(e)
-        #             print('Skipping current configuration...')
-        #             continue
+                    log_dir = run_rf_gp(data_dict, d_features, baseline_config, args, rf_parameters, 0)
+                except Exception as e:
+                    print(e)
+                    print('Skipping current configuration...')
+                    continue
 
-        #     noise_var_csv_handler.append(log_dir)
-        #     log_handler.append(log_dir)
-        #     noise_var_csv_handler.save()
+            noise_var_csv_handler.append(log_dir)
+            log_handler.append(log_dir)
+            noise_var_csv_handler.save()
 
-        # noise_var_df = pd.read_csv(noise_var_csv_handler.file_path)
-        # noise_var_opt = noise_var_df.sort_values('test_mnll', axis=0, ascending=True)['noise_var'].values[0]
+        noise_var_df = pd.read_csv(noise_var_csv_handler.file_path)
+        noise_var_opt = noise_var_df.sort_values('test_mnll', axis=0, ascending=True)['noise_var'].values[0]
 
-        # print('Optimal noise var: {}'.format(noise_var_opt))
+        print('Optimal noise var: {}'.format(noise_var_opt))
 
-        noise_var_opt = 10**(-3)
+        # noise_var_opt = 10**(-3)
 
         del sub_data, val_data
         
@@ -515,19 +499,16 @@ if __name__ == '__main__':
                         config['hierarchical'] = False
 
                     with torch.no_grad():
-                        # try:
-                        log_dir = run_rf_gp(data_dict, d_features, config, args, rf_parameters, seed)
-                        log_handler.append(log_dir)
-                        csv_handler.append(log_dir)
-                        csv_handler.save()
-                        # except Exception as e:
-                        #     print(e)
-                        #     print('Skipping current configuration...')
-                        #     continue
+                        try:
+                            log_dir = run_rf_gp(data_dict, d_features, config, args, rf_parameters, seed)
+                            log_handler.append(log_dir)
+                            csv_handler.append(log_dir)
+                            csv_handler.save()
+                        except Exception as e:
+                            print(e)
+                            print('Skipping current configuration...')
+                            continue
 
 
         print('Total execution time: {:.2f}'.format(time.time()-start_time))
         print('Done!')
-        # Prevent script from finishing!
-        # while True:
-            # continue

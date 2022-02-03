@@ -203,8 +203,9 @@ class SRHT(torch.nn.Module):
         d_features: Projection dimension
         complex_weights: Whether to use complex-valued projections
         shuffle: Whether to shuffle the projection rows per block (not needed for SORF)
-        k: Number of subsequent projections (k=3 is used for SORF), otherwise not needed
+        k: Number of subsequent projections (k=3 is used for RFF/SORF), otherwise not needed
             possible only when complex_weights=False
+        full_cov: Whether to use correlated samples across projection blocks (faster)
         """
         super(SRHT, self).__init__()
         self.d_in = d_in
@@ -236,52 +237,29 @@ class SRHT(torch.nn.Module):
             self.permutations.data = torch.cat(
                 [i*self.d_in + torch.randperm(self.d_in, device=self.device) for i in range(self.num_blocks)]
             , dim=0)[:self.d_features]
-        # make rademacher weights real and exchange last two dimensions
-        # if self.complex_weights:
-            # self.rad.data = torch.view_as_real(self.rad.data).permute([0,1,3,2]).contiguous()
     
     def forward(self, x):
         # number of independent projections
         n_projections = self.rad.shape[1]
 
-        # if self.complex_weights:
-        #     x = x.unsqueeze(1).unsqueeze(1).expand(x.shape[0], n_projections, 2, self.d_in)
-        # else:
         x = x.unsqueeze(1).expand(x.shape[0], n_projections, self.d_in)
 
         for i in range(self.k):
             x = x * self.rad[i]
-            # x = torch.view_as_real(x * self.rad[i])
-            # x = x.permute([-1] + [i for i in range(x.dim()-1)]) #.contiguous()
-            # x = torch.stack([x.real * self.rad[i].real, x.real * self.rad[i].imag], dim=0)
             
             if self.complex_weights:
                 x.real = FastWalshHadamardTransform.apply(x.real)
                 x.imag = FastWalshHadamardTransform.apply(x.imag)
-                # x = FastWalshHadamardTransform.apply(x)
-                # x = x.permute([i+1 for i in range(x.dim()-1)] + [0]) #.contiguous()
-                # x = torch.stack([x[0], x[1]], dim=-1)
-                # x = torch.view_as_complex(x)
             else:
                 x = FastWalshHadamardTransform.apply(x)
 
             if i < (self.k-1):
                 x = x / np.sqrt(self.d_in)
 
-            # permute the result back
-            # if self.complex_weights:
-            #     x = x.permute([0,1,3,2])
-            #     # obtain one large projection tensor
-            #     x = x.view(-1, n_projections*self.d_in, 2)
+        x = x.view(-1, n_projections*self.d_in)
 
-            #     if self.shuffle or self.full_cov:
-            #         x = x.gather(1, self.permutations[None, :, None].expand(len(x), self.d_features, 2))
-            #     x = torch.view_as_complex(x)
-            # else:
-            x = x.view(-1, n_projections*self.d_in)
-
-            if self.shuffle or self.full_cov:
-                x = x.gather(1, self.permutations[None, :].expand(len(x), self.d_features))
+        if self.shuffle or self.full_cov:
+            x = x.gather(1, self.permutations[None, :].expand(len(x), self.d_features))
 
         return x
 

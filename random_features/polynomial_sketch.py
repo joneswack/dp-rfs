@@ -197,13 +197,6 @@ class PolynomialSketch(torch.nn.Module):
             for node in self.sketch_list:
                 node.resample()
 
-    def move_submodules_to_cuda(self):
-        if self.hierarchical:
-            self.root.recursive_cuda()
-        else:
-            for sketch in self.sketch_list:
-                sketch.cuda()
-
     def plain_forward(self, x):
         # non-hierarchical polynomial sketch
 
