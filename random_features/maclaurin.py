@@ -262,7 +262,7 @@ class Maclaurin(torch.nn.Module):
             mod = PolynomialSketch(self.d_in, int(dim), degree=degree,
                                     bias=0, lengthscale=1.0, var=1.0, projection_type=proj,
                                     hierarchical=hier, complex_weights=complex_weights,
-                                    trainable_kernel=False)
+                                    trainable_kernel=False, device=self.device)
             mod.resample()
             self.modules.append(mod)
 
