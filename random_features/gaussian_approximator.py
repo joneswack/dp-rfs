@@ -55,8 +55,8 @@ class GaussianApproximator(nn.Module):
             lengthscale = np.sqrt(d_in)
 
         num_lengthscales = d_in if ard else 1
-        self.log_lengthscale = torch.nn.Parameter(torch.ones(num_lengthscales, device=device).type(torch.FloatTensor) * np.log(lengthscale), requires_grad=trainable_kernel)
-        self.log_var = torch.nn.Parameter(torch.ones(1, device=device).type(torch.FloatTensor) * np.log(var), requires_grad=trainable_kernel)
+        self.log_lengthscale = torch.nn.Parameter(torch.ones(num_lengthscales, device=device).float() * np.log(lengthscale), requires_grad=trainable_kernel)
+        self.log_var = torch.nn.Parameter(torch.ones(1, device=device).float() * np.log(var), requires_grad=trainable_kernel)
 
         self.method = method
         self.projection_type = projection_type

@@ -58,7 +58,7 @@ class Maclaurin(torch.nn.Module):
 
         # we initialize the kernel hyperparameters
         if bias != 0:
-            self.log_bias = torch.nn.Parameter(torch.ones(1, device=device).type(torch.FloatTensor) * np.log(bias), requires_grad=trainable_kernel)
+            self.log_bias = torch.nn.Parameter(torch.ones(1, device=device).float() * np.log(bias), requires_grad=trainable_kernel)
             self.d_in = self.d_in + 1
         else:
             self.log_bias = None
@@ -67,8 +67,8 @@ class Maclaurin(torch.nn.Module):
             lengthscale = np.sqrt(d_in)
 
         num_lengthscales = d_in if ard else 1
-        self.log_lengthscale = torch.nn.Parameter(torch.ones(num_lengthscales, device=device).type(torch.FloatTensor) * np.log(lengthscale), requires_grad=trainable_kernel)
-        self.log_var = torch.nn.Parameter(torch.ones(1, device=device).type(torch.FloatTensor) * np.log(var), requires_grad=trainable_kernel)
+        self.log_lengthscale = torch.nn.Parameter(torch.ones(num_lengthscales, device=device).float() * np.log(lengthscale), requires_grad=trainable_kernel)
+        self.log_var = torch.nn.Parameter(torch.ones(1, device=device).float() * np.log(var), requires_grad=trainable_kernel)
 
     def expected_variances_and_biases(self, training_data, target_kernel, gaussian_kernel=False):
         """
@@ -294,7 +294,7 @@ class Maclaurin(torch.nn.Module):
         add_features = None
 
         if self.measure.has_constant:
-            add_features = torch.tensor(self.coef_fun(0)).type(torch.FloatTensor).sqrt().repeat(len(x), 1)
+            add_features = torch.tensor(self.coef_fun(0)).float().sqrt().repeat(len(x), 1)
 
         if add_features is not None:
             if x.is_cuda:
@@ -302,7 +302,7 @@ class Maclaurin(torch.nn.Module):
 
             if self.measure.h01:
                 # we need to append the linear features
-                linear = torch.tensor(self.coef_fun(1)).type(torch.FloatTensor).sqrt() * x
+                linear = torch.tensor(self.coef_fun(1)).float().sqrt() * x
                 add_features = torch.cat([add_features, linear], dim=1)
 
             if self.module_args['complex_weights']:
