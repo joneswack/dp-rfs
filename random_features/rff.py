@@ -25,7 +25,7 @@ class RFF(torch.nn.Module):
             lengthscale = np.sqrt(d_in)
         # we activate ARD
         self.log_lengthscale = torch.nn.Parameter(
-            torch.ones(d_in, device=device).type(torch.FloatTensor) * np.log(lengthscale), requires_grad=trainable_kernel)
+            torch.ones(d_in, device=device).float() * np.log(lengthscale), requires_grad=trainable_kernel)
 
         if self.projection_type == 'srht':
             self.feature_encoder = SRHT(self.d_in, self.d_features,
