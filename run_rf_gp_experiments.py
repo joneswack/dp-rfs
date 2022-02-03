@@ -183,7 +183,7 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
             approx_degree=rf_params['max_sampling_degree'], lengthscale=data_dict['lengthscale'],
             var=data_dict['kernel_var'], trainable_kernel=False, method=config['method'],
             projection_type=config['proj'], hierarchical=config['hierarchical'],
-            complex_weights=config['complex_weights']
+            complex_weights=config['complex_weights'], device=('cuda' if args.use_gpu else 'cpu')
         )
 
         # if args.use_gpu:
