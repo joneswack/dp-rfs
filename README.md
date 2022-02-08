@@ -16,7 +16,7 @@ For more information and a description of the novelties of this work, consult th
 @article{wacker2022b,
   title={Complex-to-Real Random Features for Polynomial Kernels},
   author={Wacker, Jonas and Ohana, Ruben and Filippone, Maurizio},
-  journal={arXiv preprint},
+  journal={arXiv preprint arXiv:2202.02031},
   year={2022}
 }
 ```
