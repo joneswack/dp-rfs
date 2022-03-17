@@ -1,0 +1,7 @@
+{
+    "regression": [
+        "config/datasets/boston.json"
+    ],
+    "classification": [
+    ]
+}

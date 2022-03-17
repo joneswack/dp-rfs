@@ -45,15 +45,15 @@ class Exponential_Measure(rv_discrete):
         super(Exponential_Measure, self).__init__(**kwargs)
 
     def _pmf(self, k):
+        pmf_vals = self.coefs(k)
         norm_const = np.exp(1.)
-        pmf_vals = 1. / factorial(k)
 
-        # skip constant
-        pmf_vals[0] == 0
-        norm_const = norm_const - 1.
+        if self.has_constant:
+            pmf_vals[k==0] = 0
+            norm_const = norm_const - 1.
 
         if self.h01:
-            pmf_vals[1] == 0
+            pmf_vals[k==1] = 0
             norm_const = norm_const - 1.
 
         return pmf_vals / norm_const

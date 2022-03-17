@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 
+from util.LBFGS import FullBatchLBFGS
+
 from likelihoods.softmax_likelihood import Softmax
 from likelihoods.gaussian_likelihood import Gaussian
 
@@ -49,9 +51,38 @@ def regression_scores(test_mean, test_vars, test_labels):
     # since we see two outputs as a diagonal 2d gaussian
     test_mnll = -likelihood.log_cond_prob(test_labels, test_mean).sum(dim=1).mean().item()
     # average is taken also over outputs
-    test_mse = (test_mean - test_labels).pow(2).mean().item()
+    test_rmse = (test_mean - test_labels).pow(2).mean().sqrt().item()
 
     # print('Test mse: {}'.format(test_mse))
     # print('Test MNLL Loss: {}'.format(test_mnll))
 
-    return test_mse, test_mnll
+    return test_rmse, test_mnll
+
+def exact_marginal_log_likelihood(kernel_train, training_labels, log_noise_var):
+    n = len(training_labels)
+    L_train = torch.cholesky(kernel_train + torch.exp(log_noise_var) * torch.eye(n, dtype=torch.float), upper=False)
+    alpha = cholesky_solve(training_labels, L_train)
+    mll = -0.5 * training_labels.t().mm(alpha) - L_train.diagonal().log().sum() - (n / 2) * np.log(2*np.pi)
+
+    return mll
+
+def optimize_marginal_likelihood(training_data, training_labels, kernel_fun, log_lengthscale, log_var, log_noise_var, num_iterations=10, lr=1e-3):
+    trainable_params = [log_lengthscale, log_var, log_noise_var]
+
+    for iteration in range(num_iterations):
+        print('### Iteration {} ###'.format(iteration))
+        optimizer = FullBatchLBFGS(trainable_params, lr=lr, history_size=10, line_search='Wolfe')
+
+        def closure():
+            optimizer.zero_grad()
+
+            kernel_train = kernel_fun(training_data, training_data)
+            loss = - exact_marginal_log_likelihood(kernel_train, training_labels, log_noise_var)
+            print('Loss: {}'.format(loss.item()))
+
+            return loss
+
+        loss = closure()
+        loss.backward()
+        options = {'closure': closure, 'current_loss': loss, 'max_ls': 10}
+        loss, _, lr, _, F_eval, G_eval, _, _ = optimizer.step(options)

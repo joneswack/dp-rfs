@@ -222,8 +222,12 @@ class Maclaurin(torch.nn.Module):
                             best_variance = current_variance
                             best_distribution = temp_distribution
 
-                    distribution = best_distribution
-                    final_variance = best_variance
+                    if best_distribution is None:
+                        distribution[0] += 1
+                        final_variance = compute_variances(expected_vars, expected_covs, distribution)
+                    else:
+                        distribution = best_distribution
+                        final_variance = best_variance
 
                 return distribution, final_variance
 
