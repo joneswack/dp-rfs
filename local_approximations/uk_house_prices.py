@@ -107,9 +107,9 @@ if __name__ == '__main__':
     test_labels -= label_mean
 
     noise_var = 0.8
-    log_noise_var = torch.nn.Parameter((torch.ones(1) * noise_var).log(), requires_grad=True, device=('cuda' if args.use_gpu else 'cpu'))
-    log_lengthscale = torch.nn.Parameter(torch.cdist(train_data, train_data).median().log(), requires_grad=True, device=('cuda' if args.use_gpu else 'cpu'))
-    log_var = torch.nn.Parameter((torch.ones(1) * train_labels.var()), requires_grad=True, device=('cuda' if args.use_gpu else 'cpu'))
+    log_noise_var = torch.nn.Parameter((torch.ones(1, device=('cuda' if args.use_gpu else 'cpu')) * noise_var).log(), requires_grad=True)
+    log_lengthscale = torch.nn.Parameter(torch.cdist(train_data, train_data).median().log(), requires_grad=True)
+    log_var = torch.nn.Parameter((torch.ones(1, device=('cuda' if args.use_gpu else 'cpu')) * train_labels.var()), requires_grad=True)
 
     if args.use_gpu:
         train_data = train_data.cuda()
