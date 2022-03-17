@@ -107,9 +107,9 @@ if __name__ == '__main__':
     test_labels -= label_mean
 
     noise_var = 0.8
-    log_noise_var = torch.nn.Parameter((torch.ones(1) * noise_var).log(), requires_grad=False)
-    log_lengthscale = torch.nn.Parameter(torch.cdist(train_data, train_data).median().log(), requires_grad=True)
-    log_var = torch.nn.Parameter((torch.ones(1) * train_labels.var()), requires_grad=True)
+    log_noise_var = torch.nn.Parameter((torch.ones(1) * noise_var).log(), requires_grad=True, device=('cuda' if args.use_gpu else 'cpu'))
+    log_lengthscale = torch.nn.Parameter(torch.cdist(train_data, train_data).median().log(), requires_grad=True, device=('cuda' if args.use_gpu else 'cpu'))
+    log_var = torch.nn.Parameter((torch.ones(1) * train_labels.var()), requires_grad=True, device=('cuda' if args.use_gpu else 'cpu'))
 
     if args.use_gpu:
         train_data = train_data.cuda()
@@ -117,9 +117,6 @@ if __name__ == '__main__':
         test_data = test_data.cuda()
         test_labels = test_labels.cuda()
         label_mean = label_mean.cuda()
-        log_noise_var = log_noise_var.cuda()
-        log_lengthscale = log_lengthscale.cuda()
-        log_var = log_var.cuda()
 
     kernel_fun = lambda x, y: log_var.exp() * gaussian_kernel(x, y, lengthscale=log_lengthscale.exp())
     optimize_marginal_likelihood(
