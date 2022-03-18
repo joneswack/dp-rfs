@@ -273,7 +273,7 @@ class Maclaurin(torch.nn.Module):
     def move_submodules_to_cuda(self):
         for mod in self.modules:
             mod = mod.cuda()
-            mod.move_submodules_to_cuda()
+            #mod.move_submodules_to_cuda()
 
     def forward(self, x):
         # we first apply the lengthscale

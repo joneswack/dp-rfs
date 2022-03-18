@@ -71,7 +71,7 @@ class HeteroskedasticGP(nn.Module):
             f_test_mean_full = torch.zeros(len(test_data), train_labels.shape[1], device=train_labels.device)
             f_test_stds_full = torch.zeros(len(test_data), train_labels.shape[1], device=train_labels.device)
 
-            for out_dim in tqdm(range(train_labels.shape[1])):
+            for out_dim in range(train_labels.shape[1]):
                 y_tmp = train_labels[:, out_dim].unsqueeze(1)
                 noise_var_tmp = noise_vars[:, out_dim].unsqueeze(1)
                 # bottleneck (cannot be accelerated without using a lot of memory)

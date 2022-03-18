@@ -9,13 +9,13 @@ from torch.utils.data import DataLoader, TensorDataset
 from torch.nn.functional import one_hot
 
 class DF_Handler(object):
-    def __init__(self, folder, filename):
+    def __init__(self, folder, filename, csv_dir='csv'):
         super(DF_Handler, self).__init__()
 
-        if not os.path.exists(os.path.join('csv', folder)):
-            os.makedirs(os.path.join('csv', folder))
+        if not os.path.exists(os.path.join(csv_dir, folder)):
+            os.makedirs(os.path.join(csv_dir, folder))
 
-        self.file_path = os.path.join('csv', folder, filename + '.csv')
+        self.file_path = os.path.join(csv_dir, folder, filename + '.csv')
         self.df = pd.DataFrame()
     
     def append(self, entry_dict):

@@ -60,7 +60,7 @@ def regression_scores(test_mean, test_vars, test_labels):
 
 def exact_marginal_log_likelihood(kernel_train, training_labels, log_noise_var):
     n = len(training_labels)
-    L_train = torch.cholesky(kernel_train + torch.exp(log_noise_var) * torch.eye(n, dtype=torch.float), upper=False)
+    L_train = torch.cholesky(kernel_train + torch.exp(log_noise_var) * torch.eye(n, dtype=torch.float, device=kernel_train.device), upper=False)
     alpha = cholesky_solve(training_labels, L_train)
     mll = -0.5 * training_labels.t().mm(alpha) - L_train.diagonal().log().sum() - (n / 2) * np.log(2*np.pi)
 
