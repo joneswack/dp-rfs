@@ -113,8 +113,8 @@ def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, va
             test_means.append(f_test_mean)
             test_stds.append(f_test_stds)
 
-        f_test_mean = torch.hstack(test_means)[0]
-        f_test_stds = torch.hstack(test_stds)[0]
+        f_test_mean = torch.cat(test_means, dim=0)
+        f_test_stds = torch.cat(test_stds, dim=0)
 
     else:
         feature_encoder.resample()
@@ -231,7 +231,7 @@ if __name__ == '__main__':
         torch.manual_seed(seed)
         np.random.seed(seed)
 
-        for D in [100, 200, 300, 400, 500]:
+        for D in [10, 50, 100, 200, 300]:
             for config in configs:
                 f_test_mean, f_test_stds, feature_dist = run_gp(
                     args, config, D,
@@ -246,13 +246,17 @@ if __name__ == '__main__':
                     f_test_stds, f_test_stds_ref
                 )
                 # 18 nan values in reference std
-                test_kl = test_kl[~test_kl.isnan()].sum(dim=0).mean()
+                test_kl = test_kl[~test_kl.isnan()].sum(dim=0).mean().item()
                 
-                test_mean_mse = (f_test_mean_ref - f_test_mean).pow(2).mean()
+                test_mean_mse = (f_test_mean_ref - f_test_mean).pow(2).mean().item()
                 test_var_mse = (f_test_stds_ref**2 - f_test_stds**2)
-                test_var_mse = test_var_mse[~test_var_mse.isnan()].pow(2).mean()
+                test_var_mse = test_var_mse[~test_var_mse.isnan()].pow(2).mean().item()
 
-                test_rmse, test_mnll = regression_scores(f_test_mean, f_test_stds**2 + noise_var, test_labels)
+                test_rmse, test_mnll = regression_scores(
+                    f_test_mean+label_mean,
+                    f_test_stds**2 + log_noise_var.exp().item(),
+                    test_labels+label_mean
+                )
 
                 feature_dist = str(feature_dist)
 
