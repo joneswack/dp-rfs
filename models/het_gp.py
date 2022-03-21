@@ -36,7 +36,9 @@ def predictive_dist_exact(train_data, test_data, train_labels, noise_vars, kerne
             L_X_t = torch.triangular_solve(k_xt, L_xx, upper=False)[0]
 
             f_test_mean_full[:, out_dim] = (k_xt.t() @ cholesky_solve(train_labels_tmp, L_xx)).view(-1)
-            f_test_stds_full[:, out_dim] = (k_tt.diagonal() - (L_X_t**2).sum(dim=0)).sqrt()
+            f_test_stds_full[:, out_dim] = k_tt.diagonal() - (L_X_t**2).sum(dim=0)
+        f_test_stds_full[f_test_stds_full < 0] = 0
+        f_test_stds_full = f_test_stds_full.sqrt()
 
     return f_test_mean_full, f_test_stds_full
 

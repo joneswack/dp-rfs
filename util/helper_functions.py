@@ -71,7 +71,8 @@ def optimize_marginal_likelihood(training_data, training_labels, kernel_fun, log
 
     for iteration in range(num_iterations):
         print('### Iteration {} ###'.format(iteration))
-        optimizer = FullBatchLBFGS(trainable_params, lr=lr, history_size=10, line_search='Wolfe')
+        # optimizer = FullBatchLBFGS(trainable_params, lr=lr, history_size=10, line_search='Wolfe')
+        optimizer = torch.optim.Adam(trainable_params, lr=lr)
 
         def closure():
             optimizer.zero_grad()
@@ -84,5 +85,11 @@ def optimize_marginal_likelihood(training_data, training_labels, kernel_fun, log
 
         loss = closure()
         loss.backward()
-        options = {'closure': closure, 'current_loss': loss, 'max_ls': 10}
-        loss, _, lr, _, F_eval, G_eval, _, _ = optimizer.step(options)
+
+        optimizer.step()
+        # options = {'closure': closure, 'current_loss': loss, 'max_ls': 10}
+        # try:
+        #     loss, _, lr, _, F_eval, G_eval, _, _ = optimizer.step(options)
+        # except RuntimeError:
+        #     print('Error during optimization. Keeping last solution.')
+        #     break

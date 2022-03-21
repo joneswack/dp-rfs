@@ -37,20 +37,22 @@ urcrnrlat=55
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--house_price_file', type=str, required=False,
-                        default='../../datasets/export/uk_house_prices/pp-monthly-update-new-version.csv',
+                        default='../datasets/export/uk_house_prices/pp-monthly-update-new-version.csv',
                         help='CSV File with the UK house prices')
     parser.add_argument('--post_code_file', type=str, required=False,
-                        default='../../datasets/export/uk_house_prices/ukpostcodes.csv',
+                        default='../datasets/export/uk_house_prices/ukpostcodes.csv',
                         help='CSV File with the UK house prices')
+    parser.add_argument('--save_dir', type=str, required=False,
+                        default='csv', help='Directory to save CSV files to')
     parser.add_argument('--num_train_samples', type=int, required=False, default=10000,
                         help='Number of data samples for training')
     parser.add_argument('--num_grid_samples', type=int, required=False, default=100,
                         help='Number of elements for each grid dimension')
     parser.add_argument('--num_lml_samples', type=int, required=False, default=5000,
                         help='Number of data samples for likelihood optimization')
-    parser.add_argument('--lml_lr', type=float, required=False, default=1e-2,
+    parser.add_argument('--lml_lr', type=float, required=False, default=1e-1,
                         help='Learning rate for likelihood optimization')
-    parser.add_argument('--lml_iterations', type=int, required=False, default=10,
+    parser.add_argument('--lml_iterations', type=int, required=False, default=20,
                         help='Number of iterations for likelihood optimization')
     parser.add_argument('--num_dist_est_samples', type=int, required=False, default=500,
                         help='Number of datapoints used to estimate maclaurin distribution')
@@ -66,6 +68,59 @@ def parse_args():
     args = parser.parse_args()
 
     return args
+
+def cluster_testpoints(test_data, num_clusters=10, method='random'):
+
+    shuffled_data = test_data[torch.randperm(len(test_data))]
+
+    # determine cluster centers
+    if method=='farthest':
+        cluster_centers = [shuffled_data[0]]
+
+        for i in range(num_clusters):
+            distances = torch.cdist(test_data, torch.stack(cluster_centers, dim=0), p=2)
+            farthest_point = test_data[distances.sum(dim=1).argmax()]
+            cluster_centers.append(farthest_point)
+
+        cluster_centers = torch.stack(cluster_centers, dim=0)
+    elif method == 'random':
+        cluster_centers = shuffled_data[:num_clusters]
+
+    # assign clusters
+    distances = torch.cdist(test_data, cluster_centers, p=2)
+    cluster_assignments = distances.argmin(dim=1)
+
+    return cluster_assignments, cluster_centers
+
+
+def compute_local_predictions(
+        train_data, test_data, train_labels,
+        cluster_assignments, cluster_centers,
+        feature_encoder, noise_var):
+
+    predictive_means = torch.zeros(
+        len(test_data), 1,
+        dtype=train_data.dtype, device=train_data.device
+    )
+    predictive_stds = torch.zeros_like(predictive_means)
+        
+    for cluster_id, cluster_center in tqdm(enumerate(cluster_centers)):
+
+        train_features = feature_encoder.forward(train_data - cluster_center)
+        test_features = feature_encoder.forward(test_data[cluster_assignments==cluster_id] - cluster_center)
+
+        het_gp = HeteroskedasticGP(None)
+
+        f_test_mean, f_test_stds = het_gp.predictive_dist(
+            train_features, test_features,
+            train_labels, noise_var * torch.ones_like(train_labels)
+        )
+
+        predictive_means[cluster_assignments==cluster_id] = f_test_mean
+        predictive_stds[cluster_assignments==cluster_id] = f_test_stds
+
+    return predictive_means, predictive_stds
+
 
 def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, var, noise_var):
     feature_encoder = GaussianApproximator(
@@ -96,26 +151,13 @@ def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, va
             feature_encoder.cuda()
             feature_encoder.feature_encoder.move_submodules_to_cuda()
 
-        # solve one GP per test input
-        test_means = []
-        test_stds = []
-        for test_point in tqdm(test_data):
-            train_features = feature_encoder.forward(train_data - test_point) #  
-            test_features = feature_encoder.forward(torch.zeros_like(test_point).unsqueeze(0)) # 
+        cluster_assignments, cluster_centers = cluster_testpoints(test_data, num_clusters=100, method='random')
 
-            het_gp = HeteroskedasticGP(None)
-
-            f_test_mean, f_test_stds = het_gp.predictive_dist(
-                train_features, test_features,
-                train_labels, noise_var * torch.ones_like(train_labels)
-            )
-
-            test_means.append(f_test_mean)
-            test_stds.append(f_test_stds)
-
-        f_test_mean = torch.cat(test_means, dim=0)
-        f_test_stds = torch.cat(test_stds, dim=0)
-
+        predictive_means, predictive_stds = compute_local_predictions(
+            train_data, test_data, train_labels,
+            cluster_assignments, cluster_centers,
+            feature_encoder, noise_var
+        )
     else:
         feature_encoder.resample()
 
@@ -129,12 +171,12 @@ def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, va
 
         het_gp = HeteroskedasticGP(None)
 
-        f_test_mean, f_test_stds = het_gp.predictive_dist(
+        predictive_means, predictive_stds = het_gp.predictive_dist(
             train_features, test_features,
             train_labels, noise_var * torch.ones_like(train_labels)
         )
 
-    return f_test_mean, f_test_stds, feature_dist
+    return predictive_means, predictive_stds, feature_dist
 
 
 if __name__ == '__main__':
@@ -193,12 +235,13 @@ if __name__ == '__main__':
         test_labels = test_labels.cuda()
         label_mean = label_mean.cuda()
 
-    noise_var = 0.8
-    log_noise_var = torch.nn.Parameter((torch.ones(1, device=('cuda' if args.use_gpu else 'cpu')) * noise_var).log(), requires_grad=False)
+    noise_var = 1.0
+    log_noise_var = torch.nn.Parameter((torch.ones(1, device=('cuda' if args.use_gpu else 'cpu')) * noise_var).log(), requires_grad=True)
     log_lengthscale = torch.nn.Parameter(torch.cdist(train_data, train_data).median().log(), requires_grad=True)
     log_var = torch.nn.Parameter((torch.ones(1, device=('cuda' if args.use_gpu else 'cpu')) * train_labels.var()), requires_grad=True)
 
     kernel_fun = lambda x, y: log_var.exp() * gaussian_kernel(x, y, lengthscale=log_lengthscale.exp())
+
     optimize_marginal_likelihood(
         train_data[:args.num_lml_samples],
         train_labels[:args.num_lml_samples],
@@ -208,7 +251,7 @@ if __name__ == '__main__':
         num_iterations=args.lml_iterations,
         lr=args.lml_lr
     )
-
+    
     print('Lengthscale:', log_lengthscale.exp().item())
     print('Kernel var:', log_var.exp().item())
     print('Noise var:', log_noise_var.exp().item())
@@ -216,15 +259,22 @@ if __name__ == '__main__':
     ### Run comparisons across feature dimensions and seeds ###
 
     # ground truth GP
-    kernel_fun = lambda x, y: log_var.exp().item() * gaussian_kernel(x, y, lengthscale=log_lengthscale.exp().item())
-    f_test_mean_ref, f_test_stds_ref = predictive_dist_exact(
-        train_data, test_data, train_labels, log_noise_var.exp().item() * torch.ones_like(train_labels), kernel_fun
-    )
+    while True:
+        try:
+            kernel_fun = lambda x, y: log_var.exp().item() * gaussian_kernel(x, y, lengthscale=log_lengthscale.exp().item())
+            f_test_mean_ref, f_test_stds_ref = predictive_dist_exact(
+                train_data, test_data, train_labels, log_noise_var.exp().item() * torch.ones_like(train_labels), kernel_fun
+            )
+            break
+        except RuntimeError:
+            log_noise_var.data = (log_noise_var.exp()*1.1).log()
+            print('Inversion error. New noise var:', log_noise_var.exp().item())
+            continue
 
     csv_handler = DF_Handler(
         'uk_house_prices',
         'ntrain{}_nll{}'.format(args.num_train_samples, args.num_lml_samples),
-        csv_dir='../csv'
+        csv_dir=args.save_dir
     )
 
     for seed in range(args.num_seeds):
@@ -242,15 +292,14 @@ if __name__ == '__main__':
                 )
 
                 test_kl = kl_factorized_gaussian(
-                    f_test_mean+label_mean, f_test_mean_ref+label_mean,
-                    f_test_stds, f_test_stds_ref
-                )
-                # 18 nan values in reference std
-                test_kl = test_kl[~test_kl.isnan()].sum(dim=0).mean().item()
+                    f_test_mean+label_mean,
+                    f_test_mean_ref+label_mean,
+                    np.sqrt(f_test_stds**2+log_noise_var.exp().item()),
+                    np.sqrt(f_test_stds_ref**2+log_noise_var.exp().item())
+                ).sum(dim=0).mean().item()
                 
                 test_mean_mse = (f_test_mean_ref - f_test_mean).pow(2).mean().item()
-                test_var_mse = (f_test_stds_ref**2 - f_test_stds**2)
-                test_var_mse = test_var_mse[~test_var_mse.isnan()].pow(2).mean().item()
+                test_var_mse = (f_test_stds_ref**2 - f_test_stds**2).pow(2).mean().item()
 
                 test_rmse, test_mnll = regression_scores(
                     f_test_mean+label_mean,
