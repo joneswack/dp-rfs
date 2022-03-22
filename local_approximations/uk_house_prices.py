@@ -331,8 +331,8 @@ def plot_gp_map(
         test_kl = kl_factorized_gaussian(
             f_test_mean+label_mean,
             f_test_mean_ref+label_mean,
-            np.sqrt(f_test_stds**2+log_noise_var.exp()),
-            np.sqrt(f_test_stds_ref**2+log_noise_var.exp())
+            (f_test_stds**2+log_noise_var.exp()).sqrt(),
+            (f_test_stds_ref**2+log_noise_var.exp()).sqrt()
         ).sum(dim=0).mean().item()
         
         test_mean_mse = (f_test_mean_ref - f_test_mean).pow(2).mean().item()
