@@ -54,7 +54,7 @@ def parse_args():
                         help='Number of data samples for likelihood optimization')
     parser.add_argument('--lml_lr', type=float, required=False, default=1e-1,
                         help='Learning rate for likelihood optimization')
-    parser.add_argument('--lml_iterations', type=int, required=False, default=10, # 20
+    parser.add_argument('--lml_iterations', type=int, required=False, default=20, # 20
                         help='Number of iterations for likelihood optimization')
     parser.add_argument('--num_dist_est_samples', type=int, required=False, default=500,
                         help='Number of datapoints used to estimate maclaurin distribution')
@@ -374,7 +374,7 @@ def plot_gp_map(
             m.scatter(
                 cluster_centers[:,0].cpu().numpy(),
                 cluster_centers[:,1].cpu().numpy(),
-                alpha=1, c=np.arange(len(cluster_centers)),
+                alpha=0.1, c='black', # np.arange(len(cluster_centers))
                 latlon=True, s=2,
                 cmap='jet'
             )
