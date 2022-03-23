@@ -182,7 +182,7 @@ class Maclaurin(torch.nn.Module):
                     inf_indices = torch.isinf(expected_val)
                     nan_indices = torch.isnan(expected_val)
                     if inf_indices.float().mean() > 0.05:
-                        raise RuntimeWarning('More than 5 percent of the expected variances are infinity. '
+                        print('More than 5 percent of the expected variances are infinity. '
                             + 'The filtered variance may be largely underestimated!')
                     expected_val[inf_indices | nan_indices] = 0
                     # squared matrix - diagonal - subtracted indices

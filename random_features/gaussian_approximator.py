@@ -20,8 +20,8 @@ class GaussianApproximator(nn.Module):
     """
 
     def __init__(self, d_in, d_features, approx_degree=4, lengthscale='auto', var=1.0,
-                    ard=False, trainable_kernel=False, method='poly_sketch',
-                    projection_type='srht', hierarchical=False, complex_weights=False, device='cpu'):
+                    ard=False, trainable_kernel=False, method='poly_sketch', device='cpu',
+                    projection_type='srht', hierarchical=False, complex_weights=False, complex_real=False):
         """
         d_in: Data input dimension
         d_features: Projection dimension
@@ -62,6 +62,7 @@ class GaussianApproximator(nn.Module):
         self.projection_type = projection_type
         self.hierarchical = hierarchical
         self.complex_weights = complex_weights
+        self.complex_real = complex_real
 
         if method == 'maclaurin':
             # maclaurin with optimized feature distribution
@@ -74,7 +75,8 @@ class GaussianApproximator(nn.Module):
                                 module_args={
                                     'projection': projection_type,
                                     'hierarchical': hierarchical,
-                                    'complex_weights': complex_weights
+                                    'complex_weights': complex_weights,
+                                    'complex_real': complex_real
                                 },
                                 # the RF hyperparameters are fixed for this module
                                 bias=0., lengthscale=1, trainable_kernel=False, device=device)
@@ -87,7 +89,8 @@ class GaussianApproximator(nn.Module):
                                 module_args={
                                     'projection': projection_type,
                                     'hierarchical': hierarchical,
-                                    'complex_weights': complex_weights
+                                    'complex_weights': complex_weights,
+                                    'complex_real': complex_real
                                 },
                                 # the RF hyperparameters are fixed for this module
                                 bias=0., lengthscale=1, trainable_kernel=False, device=device)
@@ -98,7 +101,7 @@ class GaussianApproximator(nn.Module):
             self.feature_encoder = PolynomialSketch(d_in, d_features, degree=approx_degree,
                                 bias=1, lengthscale=np.sqrt(approx_degree),
                                 trainable_kernel=False, projection_type=projection_type,
-                                complex_weights=complex_weights, device=device)
+                                complex_weights=complex_weights, complex_real=complex_real, device=device)
         elif method == 'rff':
             self.feature_encoder = RFF(d_in, d_features, lengthscale=1, trainable_kernel=False,
                                 complex_weights=complex_weights, projection_type=projection_type, device=device)

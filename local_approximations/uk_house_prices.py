@@ -20,9 +20,9 @@ from random_features.gaussian_approximator import GaussianApproximator
 
 
 configs = [
-    {'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'hierarchical': False, 'complex_weights': True},
+    {'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
     # {'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'bias': 0, 'lengthscale': True, 'hierarchical': False, 'complex_weights': True},
-    {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': True},
+    {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': True},
     # {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 10, 'bias': 0, 'lengthscale': True, 'hierarchical': False, 'complex_weights': True}
 ]
 
@@ -58,9 +58,9 @@ def parse_args():
                         help='Number of iterations for likelihood optimization')
     parser.add_argument('--num_dist_est_samples', type=int, required=False, default=500,
                         help='Number of datapoints used to estimate maclaurin distribution')
-    parser.add_argument('--num_rfs', type=int, required=False, default=300,
+    parser.add_argument('--num_rfs', type=int, required=False, default=100,
                         help='Number of random features')
-    parser.add_argument('--num_clusters', type=int, required=False, default=10000,
+    parser.add_argument('--num_clusters', type=int, required=False, default=1000,
                         help='Number of random clusters')
     parser.add_argument('--num_seeds', type=int, required=False, default=5,
                         help='Number of seeds (runs)')
@@ -139,7 +139,8 @@ def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, va
         method=config['method'],
         projection_type=config['proj'],
         hierarchical=config['hierarchical'],
-        complex_weights=config['complex_weights']
+        complex_weights=config['complex_weights'],
+        complex_real=config['complex_real']
     )
 
     if args.use_gpu:
