@@ -17,7 +17,7 @@ class Maclaurin(torch.nn.Module):
     """
 
     def __init__(self, d_in, d_features, coef_fun,
-                        module_args={'projection': 'srht', 'hierarchical': False, 'complex_weights': False},
+                        module_args={'projection': 'srht', 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
                         measure=P_Measure(2, False, 10), bias=0., lengthscale='auto', var=1.0, ard=False,
                         trainable_kernel=False, device='cpu'):
         """
@@ -83,6 +83,8 @@ class Maclaurin(torch.nn.Module):
         with torch.no_grad():
             if self.module_args['hierarchical']:
                 raise RuntimeError('Expected variance for hierarchical random features not implemented yet!')
+            if self.module_args['projection'].split('_')[0] == 'countsketch':
+                raise RuntimeError('The variance equations for TensorSketch are unknown!')
 
             # we first apply the lengthscale
             training_data = training_data / self.log_lengthscale.exp()
@@ -119,22 +121,36 @@ class Maclaurin(torch.nn.Module):
                 approx_kernel += taylor_coefs[idx] * dot_product**idx
                 expected_squared_biases.append((target_kernel - prefactor * approx_kernel).pow(2).mean().item())
 
+            if ('complex_weights' in self.module_args and self.module_args['complex_weights']) \
+                or ('complex_real' in self.module_args and self.module_args['complex_real']):
+                complex_vars = True
+            else:
+                complex_vars = False
+
+            # second moments WITHOUT covariance terms
             second_moments = LazyDict({
                 'gaussian': lambda:
-                    norms_squared + dot_product**2 if self.module_args['complex_weights'] \
+                    norms_squared + dot_product**2 if complex_vars \
                     else norms_squared + 2.*dot_product**2,
                 'rademacher': lambda:
-                    norms_squared + dot_product**2 - squared_dot_product if self.module_args['complex_weights'] \
+                    norms_squared + dot_product**2 - squared_dot_product if complex_vars \
                     else norms_squared + 2.*(dot_product**2 - squared_dot_product),
                 'srht': lambda:
-                    norms_squared + dot_product**2 - squared_dot_product if self.module_args['complex_weights'] \
+                    norms_squared + dot_product**2 - squared_dot_product if complex_vars \
                     else norms_squared + 2.*(dot_product**2 - squared_dot_product)
+            })
+            # second pseudo moments WITHOUT covariance terms
+            second_pseudo_moments = LazyDict({
+                'gaussian': lambda: 2.*dot_product**2,
+                'rademacher': lambda: 2.*dot_product**2 - squared_dot_product,
+                'srht': lambda: 2.*dot_product**2 - squared_dot_product
             })
 
             def covariance(degree):
                 if self.module_args['projection'] != 'srht':
                     return torch.zeros_like(dot_product)
-                if self.module_args['complex_weights']:
+                # we only implement the covariance of C-SRHT since we have not studied the convexity of the covariance of CtR-SRHT
+                if complex_vars:
                     return (dot_product**2 - (1./(self.d_in-1.)) \
                         * (norms_squared - squared_dot_product))**degree - dot_product**(2*degree)
                 else:
@@ -148,10 +164,13 @@ class Maclaurin(torch.nn.Module):
             start_index = 2 if self.measure.h01 else 1
 
             for deg in range(start_index, self.measure.max_val+1):
-                if self.module_args['projection'].split('_')[0] == 'countsketch':
-                    var_term = norms_squared**deg + dot_product**(2*deg)
-                else:
-                    var_term = second_moments[self.module_args['projection']]**deg - dot_product**(2*deg)
+                var_term = second_moments[self.module_args['projection']]**deg - dot_product**(2*deg)
+
+                if ('complex_real' in self.module_args and self.module_args['complex_real']):
+                    if not self.module_args['projection'] == 'srht':
+                        # we do not implement the pseudo-variance of SRHT since we don't know the convexity implications
+                        pvar_term = second_pseudo_moments[self.module_args['projection']]**deg - dot_product**(2*deg)
+                        var_term = 0.5 * (var_term + pvar_term)
                 
                 cov_term = covariance(deg)
 
