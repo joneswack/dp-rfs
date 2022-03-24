@@ -22,7 +22,7 @@ from random_features.gaussian_approximator import GaussianApproximator
 configs = [
     {'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
     # {'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'bias': 0, 'lengthscale': True, 'hierarchical': False, 'complex_weights': True},
-    {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': True},
+    {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
     # {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 10, 'bias': 0, 'lengthscale': True, 'hierarchical': False, 'complex_weights': True}
 ]
 
@@ -46,6 +46,8 @@ def parse_args():
                         default='csv', help='Directory to save CSV files to')
     parser.add_argument('--figure_dir', type=str, required=False,
                         default='figures', help='Directory to save CSV files to')
+    parser.add_argument('--num_seeds', type=int, required=False, default=5,
+                        help='Number of seeds (runs)')
     parser.add_argument('--num_train_samples', type=int, required=False, default=10000,
                         help='Number of data samples for training')
     parser.add_argument('--num_grid_samples', type=int, required=False, default=100,
@@ -62,10 +64,12 @@ def parse_args():
                         help='Number of random features')
     parser.add_argument('--num_clusters', type=int, required=False, default=1000,
                         help='Number of random clusters')
-    parser.add_argument('--num_seeds', type=int, required=False, default=5,
-                        help='Number of seeds (runs)')
+    parser.add_argument('--cluster_method', choices=['random', 'farthest'], required=False, default='random',
+                        help='Clustering method')
+    parser.add_argument('--cluster_train', dest='cluster_train', action='store_true')
+    parser.set_defaults(cluster_train=False)
     parser.add_argument('--run_gp_eval', dest='run_gp_eval', action='store_true')
-    parser.set_defaults(plot_map=False)
+    parser.set_defaults(run_gp_eval=False)
     parser.add_argument('--plot_map', dest='plot_map', action='store_true')
     parser.set_defaults(plot_map=True)
     parser.add_argument('--use_gpu', dest='use_gpu', action='store_true')
@@ -75,9 +79,9 @@ def parse_args():
 
     return args
 
-def cluster_testpoints(test_data, num_clusters=10, method='random'):
+def cluster_points(data, num_clusters=10, method='random'):
 
-    shuffled_data = test_data[torch.randperm(len(test_data))]
+    shuffled_data = data[torch.randperm(len(data))]
 
     # determine cluster centers
     if method=='farthest':
@@ -94,11 +98,7 @@ def cluster_testpoints(test_data, num_clusters=10, method='random'):
     elif method == 'random':
         cluster_centers = shuffled_data[:num_clusters]
 
-    # assign clusters
-    distances = torch.cdist(test_data, cluster_centers, p=2)
-    cluster_assignments = distances.argmin(dim=1)
-
-    return cluster_assignments, cluster_centers
+    return cluster_centers
 
 
 def compute_local_predictions(
@@ -160,7 +160,14 @@ def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, va
             feature_encoder.cuda()
             feature_encoder.feature_encoder.move_submodules_to_cuda()
 
-        cluster_assignments, cluster_centers = cluster_testpoints(test_data, num_clusters=args.num_clusters, method='random')
+        if args.cluster_train:
+            cluster_centers = cluster_points(train_data, num_clusters=args.num_clusters, method=args.cluster_method)
+        else:
+            cluster_centers = cluster_points(test_data, num_clusters=args.num_clusters, method=args.cluster_method)
+
+        # assign clusters
+        distances = torch.cdist(test_data, cluster_centers, p=2)
+        cluster_assignments = distances.argmin(dim=1)
 
         predictive_means, predictive_stds = compute_local_predictions(
             train_data, test_data, train_labels,
