@@ -113,6 +113,9 @@ def compute_local_predictions(
     predictive_stds = torch.zeros_like(predictive_means)
         
     for cluster_id, cluster_center in tqdm(enumerate(cluster_centers)):
+        if (cluster_assignments==cluster_id).sum()==0:
+            # skip empty clusters
+            continue
 
         train_features = feature_encoder.forward(train_data - cluster_center)
         test_features = feature_encoder.forward(test_data[cluster_assignments==cluster_id] - cluster_center)
