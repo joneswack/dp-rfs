@@ -56,6 +56,10 @@ class Maclaurin(torch.nn.Module):
             if self.d_features < 0:
                 self.d_features = 0
 
+        if self.module_args['complex_real']:
+            # CtR features need twice as many dimensions (dividing by 2 may loose one feature)
+            self.d_features = self.d_features // 2
+
         # we initialize the kernel hyperparameters
         if bias != 0:
             self.log_bias = torch.nn.Parameter(torch.ones(1, device=device).float() * np.log(bias), requires_grad=trainable_kernel)
