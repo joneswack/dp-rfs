@@ -69,9 +69,9 @@ def parse_args():
     parser.add_argument('--cluster_train', dest='cluster_train', action='store_true')
     parser.set_defaults(cluster_train=False)
     parser.add_argument('--run_gp_eval', dest='run_gp_eval', action='store_true')
-    parser.set_defaults(run_gp_eval=False)
+    parser.set_defaults(run_gp_eval=True)
     parser.add_argument('--plot_map', dest='plot_map', action='store_true')
-    parser.set_defaults(plot_map=True)
+    parser.set_defaults(plot_map=False)
     parser.add_argument('--use_gpu', dest='use_gpu', action='store_true')
     parser.set_defaults(use_gpu=False)
 
@@ -236,8 +236,8 @@ def run_gp_eval(
                 test_kl = kl_factorized_gaussian(
                     f_test_mean+label_mean,
                     f_test_mean_ref+label_mean,
-                    np.sqrt(f_test_stds**2+log_noise_var.exp().item()),
-                    np.sqrt(f_test_stds_ref**2+log_noise_var.exp().item())
+                    (f_test_stds**2+log_noise_var.exp()).sqrt(),
+                    (f_test_stds_ref**2+log_noise_var.exp()).sqrt()
                 ).sum(dim=0).mean().item()
                 
                 test_mean_mse = (f_test_mean_ref - f_test_mean).pow(2).mean().item()
