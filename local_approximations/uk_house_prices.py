@@ -278,7 +278,7 @@ def run_gp_eval(
                     'seed': seed,
                     'N': args.num_train_samples,
                     'D': D,
-                    'num_clusters': len(cluster_centers) if cluster_centers is None else None,
+                    'num_clusters': len(cluster_centers) if cluster_centers is not None else None,
                     'lengthscale_mult': lengthscale_multiplier,
                     'lengthscale': log_lengthscale.exp().item(),
                     'kernel_var': log_var.exp().item(),
