@@ -22,8 +22,10 @@ from random_features.gaussian_approximator import GaussianApproximator
 configs = [
     {'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
     # {'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'bias': 0, 'lengthscale': True, 'hierarchical': False, 'complex_weights': True},
+    {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
     {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': True},
-    # {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 10, 'bias': 0, 'lengthscale': True, 'hierarchical': False, 'complex_weights': True}
+    {'method': 'maclaurin', 'proj': 'srht', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
+    {'method': 'maclaurin', 'proj': 'srht', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': True}
 ]
 
 
@@ -44,9 +46,11 @@ def parse_args():
                         help='CSV File with the UK house prices')
     parser.add_argument('--csv_dir', type=str, required=False,
                         default='csv', help='Directory to save CSV files to')
+    parser.add_argument('--csv_filename', type=str, required=False,
+                        default='cluster_selection', help='The name of the CSV file to be saved')
     parser.add_argument('--figure_dir', type=str, required=False,
                         default='figures', help='Directory to save CSV files to')
-    parser.add_argument('--num_seeds', type=int, required=False, default=5,
+    parser.add_argument('--num_seeds', type=int, required=False, default=10,
                         help='Number of seeds (runs)')
     parser.add_argument('--num_train_samples', type=int, required=False, default=10000,
                         help='Number of data samples for training')
@@ -56,7 +60,7 @@ def parse_args():
                         help='Number of data samples for likelihood optimization')
     parser.add_argument('--lml_lr', type=float, required=False, default=1e-1,
                         help='Learning rate for likelihood optimization')
-    parser.add_argument('--lml_iterations', type=int, required=False, default=5, # 20
+    parser.add_argument('--lml_iterations', type=int, required=False, default=20, # 20
                         help='Number of iterations for likelihood optimization')
     parser.add_argument('--num_dist_est_samples', type=int, required=False, default=500,
                         help='Number of datapoints used to estimate maclaurin distribution')
@@ -79,27 +83,25 @@ def parse_args():
 
     return args
 
-def cluster_points(data, num_clusters=10, method='random', lengthscale=1.):
+def cluster_points(data, num_clusters=10, method='random', global_max_dist=1.):
 
     shuffled_data = data[torch.randperm(len(data))]
 
     # determine cluster centers
     if method=='farthest':
-        cluster_centers = [shuffled_data[0]]
+        cluster_centers = [shuffled_data.mean(dim=0)]
 
-        for i in range(num_clusters-1):
+        for _ in range(num_clusters-1):
             distances = torch.cdist(shuffled_data, torch.stack(cluster_centers, dim=0), p=2)
 
             # distances to the closest cluster centers
             min_dists = distances.min(dim=1)[0]
 
-            if min_dists.max() <= 2.*lengthscale:
+            if min_dists.max() <= global_max_dist:
                 break
 
             farthest_point = min_dists.argmax()
             cluster_centers.append(shuffled_data[farthest_point])
-            # mask = torch.arange(len(shuffled_data))!=farthest_point
-            # shuffled_data = shuffled_data[mask]
 
         print('Number of clusters found: {}'.format(len(cluster_centers)))
         cluster_centers = torch.stack(cluster_centers, dim=0)
@@ -141,7 +143,7 @@ def compute_local_predictions(
     return predictive_means, predictive_stds
 
 
-def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, var, noise_var):
+def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, var, noise_var, lengthscale_multiplier=1.):
     feature_encoder = GaussianApproximator(
         2, D,
         approx_degree=config['degree'],
@@ -172,9 +174,19 @@ def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, va
             feature_encoder.feature_encoder.move_submodules_to_cuda()
 
         if args.cluster_train:
-            cluster_centers = cluster_points(train_data, num_clusters=args.num_clusters, method=args.cluster_method, lengthscale=lengthscale)
+            cluster_centers = cluster_points(
+                train_data,
+                num_clusters=args.num_clusters,
+                method=args.cluster_method,
+                global_max_dist=lengthscale_multiplier*lengthscale
+            )
         else:
-            cluster_centers = cluster_points(test_data, num_clusters=args.num_clusters, method=args.cluster_method, lengthscale=lengthscale)
+            cluster_centers = cluster_points(
+                test_data,
+                num_clusters=args.num_clusters,
+                method=args.cluster_method,
+                global_max_dist=lengthscale_multiplier*lengthscale
+            )
 
         # assign clusters
         distances = torch.cdist(test_data, cluster_centers, p=2)
@@ -224,24 +236,24 @@ def run_gp_eval(
             print('Inversion error. New noise var:', log_noise_var.exp().item())
             continue
 
-    csv_handler = DF_Handler(
-        'uk_house_prices',
-        'ntrain{}_nll{}'.format(args.num_train_samples, args.num_lml_samples),
-        csv_dir=args.csv_dir
-    )
+    csv_handler = DF_Handler('uk_house_prices', args.csv_filename, csv_dir=args.csv_dir)
 
     for seed in range(args.num_seeds):
         torch.manual_seed(seed)
         np.random.seed(seed)
 
-        for D in [10, 50, 100, 200, 300]:
+        # for D in [10, 50, 100, 200, 300]:
+        D = args.num_rfs
+
+        for lengthscale_multiplier in [0.1, 0.2, 0.3, 0.4, 0.5, 1.0, 1.5, 2.0]:
             for config in configs:
-                f_test_mean, f_test_stds, feature_dist, _, _ = run_gp(
+                f_test_mean, f_test_stds, feature_dist, _, cluster_centers = run_gp(
                     args, config, D,
                     train_data, test_data, train_labels,
                     log_lengthscale.exp().item(),
                     log_var.exp().item(),
-                    log_noise_var.exp().item()
+                    log_noise_var.exp().item(),
+                    lengthscale_multiplier=lengthscale_multiplier
                 )
 
                 test_kl = kl_factorized_gaussian(
@@ -264,8 +276,10 @@ def run_gp_eval(
 
                 log_dir = {
                     'seed': seed,
+                    'N': args.num_train_samples,
                     'D': D,
-                    'num_clusters': args.num_clusters,
+                    'num_clusters': len(cluster_centers),
+                    'lengthscale_mult': lengthscale_multiplier,
                     'lengthscale': log_lengthscale.exp().item(),
                     'kernel_var': log_var.exp().item(),
                     'noise_var': log_noise_var.exp().item(),
