@@ -220,7 +220,7 @@ def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, va
 
 def run_gp_eval(
         train_data, test_data, train_labels, test_labels, label_mean,
-        log_lengthscale, log_var, log_noise_var, args
+        log_lengthscale, log_var, log_noise_var, args, csv_handler, seed
     ):
 
     # ground truth GP
@@ -236,66 +236,60 @@ def run_gp_eval(
             print('Inversion error. New noise var:', log_noise_var.exp().item())
             continue
 
-    csv_handler = DF_Handler('uk_house_prices', args.csv_filename, csv_dir=args.csv_dir)
+    # for D in [10, 50, 100, 200, 300]:
+    D = args.num_rfs
 
-    for seed in range(args.num_seeds):
-        torch.manual_seed(seed)
-        np.random.seed(seed)
+    for lengthscale_multiplier in [2**i for i in range(-4, 4, 1)]:
+        for config in configs:
+            f_test_mean, f_test_stds, feature_dist, _, cluster_centers = run_gp(
+                args, config, D,
+                train_data, test_data, train_labels,
+                log_lengthscale.exp().item(),
+                log_var.exp().item(),
+                log_noise_var.exp().item(),
+                lengthscale_multiplier=lengthscale_multiplier
+            )
 
-        # for D in [10, 50, 100, 200, 300]:
-        D = args.num_rfs
+            test_kl = kl_factorized_gaussian(
+                f_test_mean+label_mean,
+                f_test_mean_ref+label_mean,
+                (f_test_stds**2+log_noise_var.exp()).sqrt(),
+                (f_test_stds_ref**2+log_noise_var.exp()).sqrt()
+            ).sum(dim=0).mean().item()
+            
+            test_mean_mse = (f_test_mean_ref - f_test_mean).pow(2).mean().item()
+            test_var_mse = (f_test_stds_ref**2 - f_test_stds**2).pow(2).mean().item()
 
-        for lengthscale_multiplier in [2**i for i in range(-4, 4, 1)]:
-            for config in configs:
-                f_test_mean, f_test_stds, feature_dist, _, cluster_centers = run_gp(
-                    args, config, D,
-                    train_data, test_data, train_labels,
-                    log_lengthscale.exp().item(),
-                    log_var.exp().item(),
-                    log_noise_var.exp().item(),
-                    lengthscale_multiplier=lengthscale_multiplier
-                )
+            test_rmse, test_mnll = regression_scores(
+                f_test_mean+label_mean,
+                f_test_stds**2 + log_noise_var.exp().item(),
+                test_labels + label_mean
+            )
 
-                test_kl = kl_factorized_gaussian(
-                    f_test_mean+label_mean,
-                    f_test_mean_ref+label_mean,
-                    (f_test_stds**2+log_noise_var.exp()).sqrt(),
-                    (f_test_stds_ref**2+log_noise_var.exp()).sqrt()
-                ).sum(dim=0).mean().item()
-                
-                test_mean_mse = (f_test_mean_ref - f_test_mean).pow(2).mean().item()
-                test_var_mse = (f_test_stds_ref**2 - f_test_stds**2).pow(2).mean().item()
+            feature_dist = str(feature_dist)
 
-                test_rmse, test_mnll = regression_scores(
-                    f_test_mean+label_mean,
-                    f_test_stds**2 + log_noise_var.exp().item(),
-                    test_labels + label_mean
-                )
+            log_dir = {
+                'seed': seed,
+                'N': args.num_train_samples,
+                'D': D,
+                'num_clusters': len(cluster_centers) if cluster_centers is not None else None,
+                'lengthscale_mult': lengthscale_multiplier,
+                'lengthscale': log_lengthscale.exp().item(),
+                'kernel_var': log_var.exp().item(),
+                'noise_var': log_noise_var.exp().item(),
+                'method': config['method'],
+                'proj': config['proj'],
+                'ctr': config['complex_real'],
+                'feature_dist': feature_dist,
+                'rmse': test_rmse,
+                'test_kl': test_kl,
+                'test_mnll': test_mnll,
+                'test_mean_mse': test_mean_mse,
+                'test_var_mse': test_var_mse
+            }
 
-                feature_dist = str(feature_dist)
-
-                log_dir = {
-                    'seed': seed,
-                    'N': args.num_train_samples,
-                    'D': D,
-                    'num_clusters': len(cluster_centers) if cluster_centers is not None else None,
-                    'lengthscale_mult': lengthscale_multiplier,
-                    'lengthscale': log_lengthscale.exp().item(),
-                    'kernel_var': log_var.exp().item(),
-                    'noise_var': log_noise_var.exp().item(),
-                    'method': config['method'],
-                    'proj': config['proj'],
-                    'ctr': config['complex_real'],
-                    'feature_dist': feature_dist,
-                    'rmse': test_rmse,
-                    'test_kl': test_kl,
-                    'test_mnll': test_mnll,
-                    'test_mean_mse': test_mean_mse,
-                    'test_var_mse': test_var_mse
-                }
-
-                csv_handler.append(log_dir)
-                csv_handler.save()
+            csv_handler.append(log_dir)
+            csv_handler.save()
 
 def plot_gp_map(
         train_data, train_labels, test_labels, label_mean,
@@ -463,58 +457,67 @@ if __name__ == '__main__':
     data = torch.from_numpy(result[['lon', 'lat']].values).float()
     labels = torch.from_numpy(result['price'].values).log().unsqueeze(1).float()
 
-    # shuffle data
-    permutation = torch.randperm(len(data))
-    data = data[permutation]
-    labels = labels[permutation]
 
-    train_data = data[:args.num_train_samples]
-    train_labels = labels[:args.num_train_samples]
-    label_mean = train_labels.mean()
-    train_labels -= label_mean
-    test_data = data[args.num_train_samples:]
-    test_labels = labels[args.num_train_samples:]
-    test_labels -= label_mean
+    csv_handler = DF_Handler('uk_house_prices', args.csv_filename, csv_dir=args.csv_dir)
 
-    if args.use_gpu:
-        train_data = train_data.cuda()
-        train_labels = train_labels.cuda()
-        test_data = test_data.cuda()
-        test_labels = test_labels.cuda()
-        label_mean = label_mean.cuda()
+    seeds = args.num_seeds if args.run_gp_eval else 1
 
-    noise_var = 1.0
-    log_noise_var = torch.nn.Parameter((torch.ones(1, device=('cuda' if args.use_gpu else 'cpu')) * noise_var).log(), requires_grad=True)
-    log_lengthscale = torch.nn.Parameter(torch.cdist(train_data, train_data).median().log(), requires_grad=True)
-    log_var = torch.nn.Parameter((torch.ones(1, device=('cuda' if args.use_gpu else 'cpu')) * train_labels.var()), requires_grad=True)
+    for seed in range(seeds):
+        torch.manual_seed(seed)
+        np.random.seed(seed)
 
-    kernel_fun = lambda x, y: log_var.exp() * gaussian_kernel(x, y, lengthscale=log_lengthscale.exp())
+        # shuffle data
+        permutation = torch.randperm(len(data))
+        data = data[permutation]
+        labels = labels[permutation]
 
-    optimize_marginal_likelihood(
-        train_data[:args.num_lml_samples],
-        train_labels[:args.num_lml_samples],
-        kernel_fun, log_lengthscale,
-        log_var,
-        log_noise_var,
-        num_iterations=args.lml_iterations,
-        lr=args.lml_lr
-    )
-    
-    print('Lengthscale:', log_lengthscale.exp().item())
-    print('Kernel var:', log_var.exp().item())
-    print('Noise var:', log_noise_var.exp().item())
+        train_data = data[:args.num_train_samples]
+        train_labels = labels[:args.num_train_samples]
+        label_mean = train_labels.mean()
+        train_labels -= label_mean
+        test_data = data[args.num_train_samples:]
+        test_labels = labels[args.num_train_samples:]
+        test_labels -= label_mean
 
-    ### Run comparisons across feature dimensions and seeds ###
-    if args.run_gp_eval:
-        run_gp_eval(
-            train_data, test_data, train_labels, test_labels, label_mean,
-            log_lengthscale, log_var, log_noise_var, args
+        if args.use_gpu:
+            train_data = train_data.cuda()
+            train_labels = train_labels.cuda()
+            test_data = test_data.cuda()
+            test_labels = test_labels.cuda()
+            label_mean = label_mean.cuda()
+
+        noise_var = 1.0
+        log_noise_var = torch.nn.Parameter((torch.ones(1, device=('cuda' if args.use_gpu else 'cpu')) * noise_var).log(), requires_grad=True)
+        log_lengthscale = torch.nn.Parameter(torch.cdist(train_data, train_data).median().log(), requires_grad=True)
+        log_var = torch.nn.Parameter((torch.ones(1, device=('cuda' if args.use_gpu else 'cpu')) * train_labels.var()), requires_grad=True)
+
+        kernel_fun = lambda x, y: log_var.exp() * gaussian_kernel(x, y, lengthscale=log_lengthscale.exp())
+
+        optimize_marginal_likelihood(
+            train_data[:args.num_lml_samples],
+            train_labels[:args.num_lml_samples],
+            kernel_fun, log_lengthscale,
+            log_var,
+            log_noise_var,
+            num_iterations=args.lml_iterations,
+            lr=args.lml_lr
         )
+        
+        print('Lengthscale:', log_lengthscale.exp().item())
+        print('Kernel var:', log_var.exp().item())
+        print('Noise var:', log_noise_var.exp().item())
 
-    ### plot map ###
-    if args.plot_map:
-        plot_gp_map(
-            train_data, train_labels, test_labels, label_mean,
-            log_lengthscale, log_var, log_noise_var, args
-        )
+        ### Run comparisons across feature dimensions and seeds ###
+        if args.run_gp_eval:
+            run_gp_eval(
+                train_data, test_data, train_labels, test_labels, label_mean,
+                log_lengthscale, log_var, log_noise_var, args, csv_handler, seed
+            )
+
+        ### plot map ###
+        if args.plot_map:
+            plot_gp_map(
+                train_data, train_labels, test_labels, label_mean,
+                log_lengthscale, log_var, log_noise_var, args
+            )
 
