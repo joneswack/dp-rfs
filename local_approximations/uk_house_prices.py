@@ -143,7 +143,7 @@ def compute_local_predictions(
     return predictive_means, predictive_stds
 
 
-def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, var, noise_var, lengthscale_multiplier=1.):
+def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, var, noise_var, cluster_assignments, cluster_centers):
     feature_encoder = GaussianApproximator(
         2, D,
         approx_degree=config['degree'],
@@ -173,25 +173,6 @@ def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, va
             feature_encoder.cuda()
             feature_encoder.feature_encoder.move_submodules_to_cuda()
 
-        if args.cluster_train:
-            cluster_centers = cluster_points(
-                train_data,
-                num_clusters=args.num_clusters,
-                method=args.cluster_method,
-                global_max_dist=lengthscale_multiplier*lengthscale
-            )
-        else:
-            cluster_centers = cluster_points(
-                test_data,
-                num_clusters=args.num_clusters,
-                method=args.cluster_method,
-                global_max_dist=lengthscale_multiplier*lengthscale
-            )
-
-        # assign clusters
-        distances = torch.cdist(test_data, cluster_centers, p=2)
-        cluster_assignments = distances.argmin(dim=1)
-
         predictive_means, predictive_stds = compute_local_predictions(
             train_data, test_data, train_labels,
             cluster_assignments, cluster_centers,
@@ -215,7 +196,7 @@ def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, va
             train_labels, noise_var * torch.ones_like(train_labels)
         )
 
-    return predictive_means, predictive_stds, feature_dist, cluster_assignments, cluster_centers
+    return predictive_means, predictive_stds, feature_dist
 
 
 def run_gp_eval(
@@ -240,6 +221,26 @@ def run_gp_eval(
     D = args.num_rfs
 
     for lengthscale_multiplier in [2**i for i in range(-4, 4, 1)]:
+        # determine clusters
+        if args.cluster_train:
+            cluster_centers = cluster_points(
+                train_data,
+                num_clusters=args.num_clusters,
+                method=args.cluster_method,
+                global_max_dist=lengthscale_multiplier*log_lengthscale.exp().item()
+            )
+        else:
+            cluster_centers = cluster_points(
+                test_data,
+                num_clusters=args.num_clusters,
+                method=args.cluster_method,
+                global_max_dist=lengthscale_multiplier*log_lengthscale.exp().item()
+            )
+
+        # assign clusters
+        distances = torch.cdist(test_data, cluster_centers, p=2)
+        cluster_assignments = distances.argmin(dim=1)
+
         for config in configs:
             f_test_mean, f_test_stds, feature_dist, _, cluster_centers = run_gp(
                 args, config, D,
@@ -247,7 +248,8 @@ def run_gp_eval(
                 log_lengthscale.exp().item(),
                 log_var.exp().item(),
                 log_noise_var.exp().item(),
-                lengthscale_multiplier=lengthscale_multiplier
+                cluster_assignments,
+                cluster_centers
             )
 
             test_kl = kl_factorized_gaussian(
