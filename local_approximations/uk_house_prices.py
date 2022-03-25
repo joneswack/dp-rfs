@@ -220,7 +220,7 @@ def run_gp_eval(
     # for D in [10, 50, 100, 200, 300]:
     D = args.num_rfs
 
-    for lengthscale_multiplier in [2**i for i in range(-4, 4, 1)]:
+    for lengthscale_multiplier in [2**i for i in range(-3, 4, 1)]:
         # determine clusters
         if args.cluster_train:
             cluster_centers = cluster_points(
