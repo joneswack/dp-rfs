@@ -71,7 +71,7 @@ def parse_args():
     parser.add_argument('--cluster_method', choices=['random', 'farthest'], required=False, default='farthest',
                         help='Clustering method')
     parser.add_argument('--cluster_train', dest='cluster_train', action='store_true')
-    parser.set_defaults(cluster_train=False)
+    parser.set_defaults(cluster_train=True)
     parser.add_argument('--run_gp_eval', dest='run_gp_eval', action='store_true')
     parser.set_defaults(run_gp_eval=True)
     parser.add_argument('--plot_map', dest='plot_map', action='store_true')
@@ -245,7 +245,7 @@ def run_gp_eval(
         # for D in [10, 50, 100, 200, 300]:
         D = args.num_rfs
 
-        for lengthscale_multiplier in [0.1, 0.2, 0.3, 0.4, 0.5, 1.0, 1.5, 2.0]:
+        for lengthscale_multiplier in [2**i for i in range(-4, 4, 1)]:
             for config in configs:
                 f_test_mean, f_test_stds, feature_dist, _, cluster_centers = run_gp(
                     args, config, D,

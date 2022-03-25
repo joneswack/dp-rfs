@@ -1,0 +1,2 @@
+D,N,ctr,feature_dist,kernel_var,lengthscale,lengthscale_mult,method,noise_var,num_clusters,proj,rmse,seed,test_kl,test_mean_mse,test_mnll,test_var_mse
+100.0,10000.0,0.0,None,1.8422868251800537,1.6442173719406128,0.1,rff,0.904837429523468,,gaussian,0.5471068620681763,0.0,57.22587585449219,0.007159064989537001,1.0349640846252441,1.3977430626255227e-06
