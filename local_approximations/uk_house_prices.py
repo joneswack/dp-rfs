@@ -56,7 +56,7 @@ def parse_args():
                         help='Number of data samples for likelihood optimization')
     parser.add_argument('--lml_lr', type=float, required=False, default=1e-1,
                         help='Learning rate for likelihood optimization')
-    parser.add_argument('--lml_iterations', type=int, required=False, default=20, # 20
+    parser.add_argument('--lml_iterations', type=int, required=False, default=5, # 20
                         help='Number of iterations for likelihood optimization')
     parser.add_argument('--num_dist_est_samples', type=int, required=False, default=500,
                         help='Number of datapoints used to estimate maclaurin distribution')
@@ -64,7 +64,7 @@ def parse_args():
                         help='Number of random features')
     parser.add_argument('--num_clusters', type=int, required=False, default=1000,
                         help='Number of random clusters')
-    parser.add_argument('--cluster_method', choices=['random', 'farthest'], required=False, default='random',
+    parser.add_argument('--cluster_method', choices=['random', 'farthest'], required=False, default='farthest',
                         help='Clustering method')
     parser.add_argument('--cluster_train', dest='cluster_train', action='store_true')
     parser.set_defaults(cluster_train=False)
@@ -79,7 +79,7 @@ def parse_args():
 
     return args
 
-def cluster_points(data, num_clusters=10, method='random'):
+def cluster_points(data, num_clusters=10, method='random', lengthscale=1.):
 
     shuffled_data = data[torch.randperm(len(data))]
 
@@ -89,11 +89,19 @@ def cluster_points(data, num_clusters=10, method='random'):
 
         for i in range(num_clusters-1):
             distances = torch.cdist(shuffled_data, torch.stack(cluster_centers, dim=0), p=2)
-            farthest_point = distances.min(dim=1)[0].argmax()
+
+            # distances to the closest cluster centers
+            min_dists = distances.min(dim=1)[0]
+
+            if min_dists.max() <= 2.*lengthscale:
+                break
+
+            farthest_point = min_dists.argmax()
             cluster_centers.append(shuffled_data[farthest_point])
             # mask = torch.arange(len(shuffled_data))!=farthest_point
             # shuffled_data = shuffled_data[mask]
 
+        print('Number of clusters found: {}'.format(len(cluster_centers)))
         cluster_centers = torch.stack(cluster_centers, dim=0)
     elif method == 'random':
         cluster_centers = shuffled_data[:num_clusters]
@@ -164,9 +172,9 @@ def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, va
             feature_encoder.feature_encoder.move_submodules_to_cuda()
 
         if args.cluster_train:
-            cluster_centers = cluster_points(train_data, num_clusters=args.num_clusters, method=args.cluster_method)
+            cluster_centers = cluster_points(train_data, num_clusters=args.num_clusters, method=args.cluster_method, lengthscale=lengthscale)
         else:
-            cluster_centers = cluster_points(test_data, num_clusters=args.num_clusters, method=args.cluster_method)
+            cluster_centers = cluster_points(test_data, num_clusters=args.num_clusters, method=args.cluster_method, lengthscale=lengthscale)
 
         # assign clusters
         distances = torch.cdist(test_data, cluster_centers, p=2)
