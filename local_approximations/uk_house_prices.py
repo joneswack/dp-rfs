@@ -285,7 +285,7 @@ def run_gp_eval(
                     'noise_var': log_noise_var.exp().item(),
                     'method': config['method'],
                     'proj': config['proj'],
-                    'complex_weights': config['complex_weights'],
+                    'ctr': config['complex_real'],
                     'feature_dist': feature_dist,
                     'rmse': test_rmse,
                     'test_kl': test_kl,
