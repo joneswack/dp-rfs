@@ -242,7 +242,7 @@ def run_gp_eval(
         cluster_assignments = distances.argmin(dim=1)
 
         for config in configs:
-            f_test_mean, f_test_stds, feature_dist, _, cluster_centers = run_gp(
+            f_test_mean, f_test_stds, feature_dist = run_gp(
                 args, config, D,
                 train_data, test_data, train_labels,
                 log_lengthscale.exp().item(),
@@ -346,15 +346,37 @@ def plot_gp_map(
         levels=level_space
     )
 
+    # determine clusters
+    if args.cluster_train:
+        cluster_centers = cluster_points(
+            train_data,
+            num_clusters=args.num_clusters,
+            method=args.cluster_method,
+            global_max_dist=1.0
+        )
+    else:
+        cluster_centers = cluster_points(
+            grid_data,
+            num_clusters=args.num_clusters,
+            method=args.cluster_method,
+            global_max_dist=1.0
+        )
+
+    # assign clusters
+    distances = torch.cdist(test_data, cluster_centers, p=2)
+    cluster_assignments = distances.argmin(dim=1)
+
     for j, config in enumerate(configs):
         
         # run gp
-        f_test_mean, f_test_stds, feature_dist, cluster_assignments, cluster_centers = run_gp(
-            args, config, args.num_rfs,
-            train_data, grid_inputs, train_labels,
-            log_lengthscale.exp().item(),
-            log_var.exp().item(),
-            log_noise_var.exp().item()
+        f_test_mean, f_test_stds, feature_dist = run_gp(
+                args, config, args.num_rfs,
+                train_data, test_data, train_labels,
+                log_lengthscale.exp().item(),
+                log_var.exp().item(),
+                log_noise_var.exp().item(),
+                cluster_assignments,
+                cluster_centers
         )
 
         test_kl = kl_factorized_gaussian(
