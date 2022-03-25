@@ -66,7 +66,7 @@ def parse_args():
                         help='Number of datapoints used to estimate maclaurin distribution')
     parser.add_argument('--num_rfs', type=int, required=False, default=100,
                         help='Number of random features')
-    parser.add_argument('--num_clusters', type=int, required=False, default=1000,
+    parser.add_argument('--num_clusters', type=int, required=False, default=10000,
                         help='Number of random clusters')
     parser.add_argument('--cluster_method', choices=['random', 'farthest'], required=False, default='farthest',
                         help='Clustering method')
