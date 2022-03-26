@@ -24,11 +24,13 @@ configs = [
     {'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
     {'method': 'rff', 'proj': 'srht', 'degree': 4, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
     # {'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'bias': 0, 'lengthscale': True, 'hierarchical': False, 'complex_weights': True},
-    {'method': 'maclaurin_exp_h01', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
+    # {'method': 'maclaurin_exp_h01', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
     {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
+    {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': True},
     # {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': True},
-    {'method': 'maclaurin_exp_h01', 'proj': 'srht', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
+    # {'method': 'maclaurin_exp_h01', 'proj': 'srht', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
     {'method': 'maclaurin', 'proj': 'srht', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
+    {'method': 'maclaurin', 'proj': 'srht', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': True}
     # {'method': 'maclaurin', 'proj': 'srht', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': True}
 ]
 
@@ -247,7 +249,7 @@ def run_gp_eval(
         distances = torch.cdist(test_data, cluster_centers, p=2)
         cluster_assignments = distances.argmin(dim=1)
 
-        for D in [8, 16, 32, 64, 128, 256]:
+        for D in [8, 16, 32, 64, 128, 256, 512, 1024]:
         # D = args.num_rfs
 
             for config in configs:
