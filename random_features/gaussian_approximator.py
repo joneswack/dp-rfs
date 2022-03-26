@@ -80,6 +80,22 @@ class GaussianApproximator(nn.Module):
                                 },
                                 # the RF hyperparameters are fixed for this module
                                 bias=0., lengthscale=1, trainable_kernel=False, device=device)
+        elif method == 'maclaurin_exp_h01':
+            # maclaurin with optimized feature distribution
+            # the maclaurin series for the exponential function
+            kernel_coefs = lambda x: Exponential_Measure.coefs(x)
+            # we initialize the distribution over degrees to be uniform (this will be overridden later)
+            measure = Exponential_Measure(True)
+
+            self.feature_encoder = Maclaurin(d_in, d_features, coef_fun=kernel_coefs, measure=measure,
+                                module_args={
+                                    'projection': projection_type,
+                                    'hierarchical': hierarchical,
+                                    'complex_weights': complex_weights,
+                                    'complex_real': complex_real
+                                },
+                                # the RF hyperparameters are fixed for this module
+                                bias=0., lengthscale=1, trainable_kernel=False, device=device)
         elif method == 'maclaurin_p':
             # classical maclaurin with exponentially decaying measure (Kar & Karnick 2012)
             kernel_coefs = lambda x: Exponential_Measure.coefs(x)

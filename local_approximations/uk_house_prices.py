@@ -15,17 +15,20 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "../"))
 from util.data import DF_Handler
 from util.kernels import gaussian_kernel
 from util.helper_functions import optimize_marginal_likelihood, kl_factorized_gaussian, regression_scores
+from util.measures import Exponential_Measure
 from models.het_gp import HeteroskedasticGP, predictive_dist_exact
 from random_features.gaussian_approximator import GaussianApproximator
 
 
 configs = [
-    {'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
+    # {'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
     # {'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'bias': 0, 'lengthscale': True, 'hierarchical': False, 'complex_weights': True},
+    {'method': 'maclaurin_exp_h01', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
     {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
-    {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': True},
+    # {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': True},
+    {'method': 'maclaurin_exp_h01', 'proj': 'srht', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
     {'method': 'maclaurin', 'proj': 'srht', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
-    {'method': 'maclaurin', 'proj': 'srht', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': True}
+    # {'method': 'maclaurin', 'proj': 'srht', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': True}
 ]
 
 
@@ -144,6 +147,7 @@ def compute_local_predictions(
 
 
 def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, var, noise_var, cluster_assignments, cluster_centers):
+
     feature_encoder = GaussianApproximator(
         2, D,
         approx_degree=config['degree'],
@@ -159,13 +163,16 @@ def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, va
     if args.use_gpu:
         feature_encoder.cuda()
 
-    if config['method'] == 'maclaurin':
+    if config['method'] == 'maclaurin' or config['method'] == 'maclaurin_exp_h01':
         feature_encoder.initialize_sampling_distribution(
             train_data[:args.num_dist_est_samples] - train_data[:args.num_dist_est_samples].mean(dim=0)
         )
-        # feature_encoder.feature_encoder.measure = Exponential_Measure(True)
+
+        if config['method'] == 'maclaurin':
+            feature_dist = feature_encoder.feature_encoder.measure.distribution
+        else:
+            feature_dist = None
         # feature_encoder.feature_encoder.measure.distribution = np.array(D * [1])
-        feature_dist = feature_encoder.feature_encoder.measure.distribution
 
         feature_encoder.resample()
 
@@ -217,8 +224,6 @@ def run_gp_eval(
             print('Inversion error. New noise var:', log_noise_var.exp().item())
             continue
 
-    # for D in [10, 50, 100, 200, 300]:
-    D = args.num_rfs
 
     for lengthscale_multiplier in [2**i for i in range(-3, 5, 1)]:
         # determine clusters
@@ -241,57 +246,60 @@ def run_gp_eval(
         distances = torch.cdist(test_data, cluster_centers, p=2)
         cluster_assignments = distances.argmin(dim=1)
 
-        for config in configs:
-            f_test_mean, f_test_stds, feature_dist = run_gp(
-                args, config, D,
-                train_data, test_data, train_labels,
-                log_lengthscale.exp().item(),
-                log_var.exp().item(),
-                log_noise_var.exp().item(),
-                cluster_assignments,
-                cluster_centers
-            )
+        for D in [8, 16, 32, 64, 128, 256]:
+        # D = args.num_rfs
 
-            test_kl = kl_factorized_gaussian(
-                f_test_mean+label_mean,
-                f_test_mean_ref+label_mean,
-                (f_test_stds**2+log_noise_var.exp()).sqrt(),
-                (f_test_stds_ref**2+log_noise_var.exp()).sqrt()
-            ).sum(dim=0).mean().item()
-            
-            test_mean_mse = (f_test_mean_ref - f_test_mean).pow(2).mean().item()
-            test_var_mse = (f_test_stds_ref**2 - f_test_stds**2).pow(2).mean().item()
+            for config in configs:
+                f_test_mean, f_test_stds, feature_dist = run_gp(
+                    args, config, D,
+                    train_data, test_data, train_labels,
+                    log_lengthscale.exp().item(),
+                    log_var.exp().item(),
+                    log_noise_var.exp().item(),
+                    cluster_assignments,
+                    cluster_centers
+                )
 
-            test_rmse, test_mnll = regression_scores(
-                f_test_mean+label_mean,
-                f_test_stds**2 + log_noise_var.exp().item(),
-                test_labels + label_mean
-            )
+                test_kl = kl_factorized_gaussian(
+                    f_test_mean+label_mean,
+                    f_test_mean_ref+label_mean,
+                    (f_test_stds**2+log_noise_var.exp()).sqrt(),
+                    (f_test_stds_ref**2+log_noise_var.exp()).sqrt()
+                ).sum(dim=0).mean().item()
+                
+                test_mean_mse = (f_test_mean_ref - f_test_mean).pow(2).mean().item()
+                test_var_mse = (f_test_stds_ref**2 - f_test_stds**2).pow(2).mean().item()
 
-            feature_dist = str(feature_dist)
+                test_rmse, test_mnll = regression_scores(
+                    f_test_mean+label_mean,
+                    f_test_stds**2 + log_noise_var.exp().item(),
+                    test_labels + label_mean
+                )
 
-            log_dir = {
-                'seed': seed,
-                'N': args.num_train_samples,
-                'D': D,
-                'num_clusters': len(cluster_centers) if cluster_centers is not None else None,
-                'lengthscale_mult': lengthscale_multiplier,
-                'lengthscale': log_lengthscale.exp().item(),
-                'kernel_var': log_var.exp().item(),
-                'noise_var': log_noise_var.exp().item(),
-                'method': config['method'],
-                'proj': config['proj'],
-                'ctr': config['complex_real'],
-                'feature_dist': feature_dist,
-                'rmse': test_rmse,
-                'test_kl': test_kl,
-                'test_mnll': test_mnll,
-                'test_mean_mse': test_mean_mse,
-                'test_var_mse': test_var_mse
-            }
+                feature_dist = str(feature_dist)
 
-            csv_handler.append(log_dir)
-            csv_handler.save()
+                log_dir = {
+                    'seed': seed,
+                    'N': args.num_train_samples,
+                    'D': D,
+                    'num_clusters': len(cluster_centers) if cluster_centers is not None else None,
+                    'lengthscale_mult': lengthscale_multiplier,
+                    'lengthscale': log_lengthscale.exp().item(),
+                    'kernel_var': log_var.exp().item(),
+                    'noise_var': log_noise_var.exp().item(),
+                    'method': config['method'],
+                    'proj': config['proj'],
+                    'ctr': config['complex_real'],
+                    'feature_dist': feature_dist,
+                    'rmse': test_rmse,
+                    'test_kl': test_kl,
+                    'test_mnll': test_mnll,
+                    'test_mean_mse': test_mean_mse,
+                    'test_var_mse': test_var_mse
+                }
+
+                csv_handler.append(log_dir)
+                csv_handler.save()
 
 def plot_gp_map(
         train_data, train_labels, test_labels, label_mean,
