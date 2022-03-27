@@ -8,6 +8,7 @@ import os
 from mpl_toolkits.basemap import Basemap
 
 from tqdm import tqdm
+from timeit import default_timer as timer
 import argparse
 
 import sys 
@@ -127,6 +128,8 @@ def compute_local_predictions(
         dtype=train_data.dtype, device=train_data.device
     )
     predictive_stds = torch.zeros_like(predictive_means)
+
+    test_feature_time_ms = 0
         
     for cluster_id, cluster_center in tqdm(enumerate(cluster_centers)):
         if (cluster_assignments==cluster_id).sum()==0:
@@ -134,7 +137,12 @@ def compute_local_predictions(
             continue
 
         train_features = feature_encoder.forward(train_data - cluster_center)
+
+        torch.cuda.synchronize()
+        start = timer()
         test_features = feature_encoder.forward(test_data[cluster_assignments==cluster_id] - cluster_center)
+        torch.cuda.synchronize()
+        test_feature_time_ms += (timer() - start) * 1000
 
         het_gp = HeteroskedasticGP(None)
 
@@ -146,7 +154,7 @@ def compute_local_predictions(
         predictive_means[cluster_assignments==cluster_id] = f_test_mean
         predictive_stds[cluster_assignments==cluster_id] = f_test_stds
 
-    return predictive_means, predictive_stds
+    return predictive_means, predictive_stds, test_feature_time_ms
 
 
 def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, var, noise_var, cluster_assignments, cluster_centers):
@@ -183,7 +191,7 @@ def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, va
             feature_encoder.cuda()
             feature_encoder.feature_encoder.move_submodules_to_cuda()
 
-        predictive_means, predictive_stds = compute_local_predictions(
+        predictive_means, predictive_stds, test_feature_time_ms = compute_local_predictions(
             train_data, test_data, train_labels,
             cluster_assignments, cluster_centers,
             feature_encoder, noise_var
@@ -197,7 +205,12 @@ def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, va
             feature_encoder.cuda()
 
         train_features = feature_encoder.forward(train_data)
+
+        torch.cuda.synchronize()
+        start = timer()
         test_features = feature_encoder.forward(test_data)
+        torch.cuda.synchronize()
+        test_feature_time_ms = (timer() - start) * 1000
 
         het_gp = HeteroskedasticGP(None)
 
@@ -206,7 +219,7 @@ def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, va
             train_labels, noise_var * torch.ones_like(train_labels)
         )
 
-    return predictive_means, predictive_stds, feature_dist
+    return predictive_means, predictive_stds, feature_dist, test_feature_time_ms
 
 
 def run_gp_eval(
@@ -246,14 +259,18 @@ def run_gp_eval(
             )
 
         # assign clusters
+        torch.cuda.synchronize()
+        start = timer()
         distances = torch.cdist(test_data, cluster_centers, p=2)
         cluster_assignments = distances.argmin(dim=1)
+        torch.cuda.synchronize()
+        cluster_assignment_time_ms = (timer() - start) * 1000
 
         for D in [8, 16, 32, 64, 128, 256, 512, 1024]:
         # D = args.num_rfs
 
             for config in configs:
-                f_test_mean, f_test_stds, feature_dist = run_gp(
+                f_test_mean, f_test_stds, feature_dist, test_feature_time_ms = run_gp(
                     args, config, D,
                     train_data, test_data, train_labels,
                     log_lengthscale.exp().item(),
@@ -298,7 +315,9 @@ def run_gp_eval(
                     'test_kl': test_kl,
                     'test_mnll': test_mnll,
                     'test_mean_mse': test_mean_mse,
-                    'test_var_mse': test_var_mse
+                    'test_var_mse': test_var_mse,
+                    'cluster_time_ms': cluster_assignment_time_ms,
+                    'test_feature_time_ms': test_feature_time_ms
                 }
 
                 csv_handler.append(log_dir)
