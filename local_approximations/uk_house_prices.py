@@ -404,7 +404,7 @@ def plot_gp_map(
         dummy_config = ('single_cluster' in config and config['single_cluster'])
         
         # run gp
-        f_test_mean, f_test_stds, feature_dist = run_gp(
+        f_test_mean, f_test_stds, feature_dist, test_feature_time_ms = run_gp(
                 args, config, args.num_rfs,
                 train_data, test_data, train_labels,
                 log_lengthscale.exp().item(),
