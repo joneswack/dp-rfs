@@ -394,7 +394,7 @@ def plot_gp_map(
         )
 
     # assign clusters
-    distances = torch.cdist(test_data, cluster_centers, p=2)
+    distances = torch.cdist(grid_inputs, cluster_centers, p=2)
     cluster_assignments = distances.argmin(dim=1)
 
     dummy_assignments = torch.zeros_like(cluster_assignments)
