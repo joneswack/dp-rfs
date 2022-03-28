@@ -22,12 +22,12 @@ from random_features.gaussian_approximator import GaussianApproximator
 
 
 configs = [
-    {'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
+    {'name': 'Random Fourier Features', 'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
     # {'method': 'rff', 'proj': 'srht', 'degree': 4, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
     # {'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'bias': 0, 'lengthscale': True, 'hierarchical': False, 'complex_weights': True},
     # {'method': 'maclaurin_exp_h01', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
-    {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
-    {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False, 'single_cluster': True},
+    {'name': 'Macl. Radem. (test points as centers)', 'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
+    {'name': 'Macl. Radem. (training mean as center)', 'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False, 'single_cluster': True},
     # {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': True},
     # {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': True},
     # {'method': 'maclaurin_exp_h01', 'proj': 'srht', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
@@ -79,7 +79,7 @@ def parse_args():
     parser.add_argument('--cluster_method', choices=['random', 'farthest'], required=False, default='random',
                         help='Clustering method')
     parser.add_argument('--cluster_train', dest='cluster_train', action='store_true')
-    parser.set_defaults(cluster_train=True)
+    parser.set_defaults(cluster_train=False)
     parser.add_argument('--run_gp_eval', dest='run_gp_eval', action='store_true')
     parser.set_defaults(run_gp_eval=False)
     parser.add_argument('--plot_map', dest='plot_map', action='store_true')
@@ -355,7 +355,11 @@ def plot_gp_map(
         )
     )
 
-    axes[0].set_title('Full GP')
+    title = 'Reference GP Predictive Distribution\n'
+    title += '$l={:.2f}, '.format(log_lengthscale.exp().item())
+    title += '\\sigma^2={:.2f}, '.format(log_var.exp().item())
+    title += '\\sigma^2_{{noise}} = {:.2f}$'.format(log_noise_var.exp().item())
+    axes[0].set_title(title)
 
     m = Basemap(projection='merc',
         resolution = 'i', ax=axes[0],
@@ -387,7 +391,7 @@ def plot_gp_map(
         )
     else:
         cluster_centers = cluster_points(
-            grid_data,
+            grid_inputs,
             num_clusters=args.num_clusters,
             method=args.cluster_method,
             global_max_dist=1.0
@@ -398,7 +402,7 @@ def plot_gp_map(
     cluster_assignments = distances.argmin(dim=1)
 
     dummy_assignments = torch.zeros_like(cluster_assignments)
-    dummy_centers = cluster_centers[0].unsqueeze(0)
+    dummy_centers = train_data.mean(dim=0).unsqueeze(0)
 
     for j, config in enumerate(configs):
         dummy_config = ('single_cluster' in config and config['single_cluster'])
@@ -430,12 +434,7 @@ def plot_gp_map(
         #     test_labels + label_mean
         # )
 
-        axes[j+1].set_title('{}{} {} - KL: {:.2f}'.format(
-            'Complex ' if config['complex_weights'] else '',
-            config['method'],
-            config['proj'],
-            test_kl
-        ))
+        axes[j+1].set_title('{}\nKL Divergence: {}'.format(config['name'], int(test_kl)))
         m = Basemap(projection='merc',
             resolution = 'i', ax=axes[j+1],
             llcrnrlon=llcrnrlon, llcrnrlat=llcrnrlat,

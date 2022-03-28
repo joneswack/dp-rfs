@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 import matplotlib.pylab as pylab
 from scipy.io import loadmat
 
+import sys, os
+sys.path.append(os.path.join(os.path.dirname(__file__), "../"))
+
 from models.het_gp import HeteroskedasticGP, predictive_dist_exact
 from random_features.gaussian_approximator import GaussianApproximator
 from util.helper_functions import classification_scores, regression_scores
@@ -13,11 +16,12 @@ from util.helper_functions import cholesky_solve
 
 from util.LBFGS import FullBatchLBFGS
 
-save_name = 'sinc_1d_example'
+save_name = 'sinc_1d_example_test_means'
 D = 10 # number of RFs
 # we need more points for high frequency
-n_points = [15, 25, 10] # 50
-frequencies = [5, 2, 0.5]
+n_points = [50, 25, 10] # 50
+# frequencies = [5, 2, 0.5]
+frequencies = [5]
 
 noise_var = 0.01
 seed = 8
@@ -28,15 +32,15 @@ start = -1.5
 end = 1.5
 
 configs = [
-    {'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'hierarchical': False, 'complex_weights': False},
-    # {'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'bias': 0, 'lengthscale': True, 'hierarchical': False, 'complex_weights': True},
-    {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 10, 'hierarchical': False, 'complex_weights': False},
-    # {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 10, 'bias': 0, 'lengthscale': True, 'hierarchical': False, 'complex_weights': True}
+    {'name': 'Random Fourier Features', 'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
+    {'name': 'Macl. Radem. (test points as centers)', 'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
+    {'name': 'Macl. Radem. (training mean as center)', 'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False, 'single_cluster': True},
 ]
 
 params = {
     'legend.fontsize': 'medium',
-    'figure.figsize': (3*len(frequencies), 4), # 2.2*len(csvs)
+    # 'figure.figsize': (3*len(frequencies), 4), # 2.2*len(csvs)
+    'figure.figsize': (12, 3),
     'axes.labelsize': 'medium',
     'axes.titlesize':'medium',
     'xtick.labelsize':'large',
@@ -78,17 +82,17 @@ def plot_app_vs_full_with_div(ax, i, j, test_inputs, test_labels, original_input
     ax.plot(original_inputs, original_labels, 'ko', markersize=3, label='Training Points')
 
     # Approx. GP
-    ax.plot(test_inputs, app_mean, '--', lw=2, color='royalblue', label=r'Approx. GP $\mu$')
+    ax.plot(test_inputs, app_mean, '--', lw=2, color='royalblue', label=r'Approx. pred. mean')
     ax.plot(test_inputs, app_mean-2*app_stds, color='royalblue', lw=1,
-                    alpha=1, label=r'Approx. GP $\mu \pm 2 \sigma$')
+                    alpha=1, label=r'Approx. pred. mean $\pm$ 2 Std. Dev.')
     ax.plot(test_inputs, app_mean+2*app_stds, color='royalblue', lw=1,
                     alpha=1)
     # ax.plot(test_inputs, test_labels, 'b-', lw=2, label='Target function', alpha=0.1)
 
     # Full GP
-    ax.plot(test_inputs, full_mean, 'k-', lw=2, label=r'Full GP $\mu$', alpha=0.75)
+    ax.plot(test_inputs, full_mean, 'k-', lw=2, label=r'Ref. pred. mean', alpha=0.75)
     ax.fill_between(test_inputs, full_mean-2*full_stds, full_mean+2*full_stds, color='grey', 
-                    alpha=0.25, label=r'Full GP $\mu \pm 2 \sigma$')
+                    alpha=0.25, label=r'Ref. pred. mean $\pm$ 2 Std. Dev.')
 
     ax.set_xlabel(r'$x$')
     ax.set_xlim(1.5*start, 1.5*end)
@@ -101,16 +105,19 @@ def plot_app_vs_full_with_div(ax, i, j, test_inputs, test_labels, original_input
         title += '$l={:.2f}, '.format(lengthscale)
         title += '\\sigma^2={:.2f}, '.format(var)
         title += '\\sigma^2_{{noise}} = {:.2f}$'.format(noise_var)
-        ax.set_title(title)
-        ax.set_xlabel('')
-        ax.set_xticklabels([])
+        # ax.set_title(title)
+        # ax.set_xlabel('')
+        # ax.set_xticklabels([])
         # ax.legend(loc='lower right')
+        ax.set_ylabel(title)
 
     if i == 0:
         if j == 0:
-            ax.set_ylabel('$\\bf{{RFF \\, Gaussian}}$')
+            # ax.set_ylabel('$\\bf{{RFF \\, Gaussian}}$')
+            pass
         else:
-            ax.set_ylabel('$\\bf{{Maclaurin \\, Radem.}}$')
+            # ax.set_ylabel('$\\bf{{Maclaurin \\, Radem.}}$')
+            pass
 
 
 
@@ -163,9 +170,11 @@ if __name__ == '__main__':
     # train_data = (train_data - train_data.mean(0)) #/ train_data.std()
     # train_labels = train_labels - train_labels.mean(0)
 
-    fig1, f1_axes = plt.subplots(ncols=len(frequencies), nrows=len(configs))
+    # fig1, f1_axes = plt.subplots(ncols=len(frequencies), nrows=len(configs))
+    fig1, f1_axes = plt.subplots(ncols=len(configs), nrows=len(frequencies))
 
     for i, freq in enumerate(frequencies):
+
         fn = lambda x: np.sinc(freq * x)
 
         train_data, train_labels = generate_sinosoids(fn, n_points[i], noise_var, seed)
@@ -208,13 +217,15 @@ if __name__ == '__main__':
                                                 approx_degree=config['degree'],
                                                 lengthscale=1., var=1.,
                                                 trainable_kernel=False,
-                                                method=config['method'], projection_type=config['proj'], hierarchical=config['hierarchical'],
+                                                method=config['method'],
+                                                projection_type=config['proj'],
+                                                hierarchical=config['hierarchical'],
                                                 complex_weights=config['complex_weights'])
 
             feature_encoder.log_lengthscale.data = log_lengthscale.data
             feature_encoder.log_var.data = log_var.data
 
-            if config['method'] == 'maclaurin':
+            if config['method'] == 'maclaurin' and not 'single_cluster' in config:
                 # feature_encoder.initialize_sampling_distribution(train_data)
                 feature_encoder.feature_encoder.measure.distribution = np.array(D * [1])
                 feature_dist = feature_encoder.feature_encoder.measure.distribution
@@ -244,8 +255,8 @@ if __name__ == '__main__':
             else:
                 feature_dist = None
                 feature_encoder.resample()
-                train_features = feature_encoder.forward(train_data)
-                test_features = feature_encoder.forward(test_data)
+                train_features = feature_encoder.forward(train_data - train_data.mean(dim=0))
+                test_features = feature_encoder.forward(test_data - train_data.mean(dim=0))
 
                 het_gp = HeteroskedasticGP(None)
 
@@ -254,7 +265,8 @@ if __name__ == '__main__':
                     train_labels, noise_var * torch.ones_like(train_labels)
                 )
 
-            cur_ax = f1_axes[j, i]
+            # cur_ax = f1_axes[j, i]
+            cur_ax = f1_axes[j]
 
             plot_app_vs_full_with_div(
                 cur_ax, i, j,
@@ -267,10 +279,14 @@ if __name__ == '__main__':
                 noise_var, feature_dist
             )
 
+            cur_ax.set_title(config['name'])
+
             # test_error, test_mnll = regression_scores(f_test_mean, f_test_stds**2 + noise_var, test_labels)
 
     plt.tight_layout()
-    handles, labels = f1_axes[0,0].get_legend_handles_labels()
+    # handles, labels = f1_axes[0,0].get_legend_handles_labels()
+    handles, labels = f1_axes[0].get_legend_handles_labels()
+    
     legend = plt.figlegend(handles=handles, labels=labels, loc='lower center', ncol=5, bbox_to_anchor = (0,-0.075,1.03,1.0), bbox_transform = plt.gcf().transFigure)
 
     plt.savefig('figures/{}.pdf'.format(save_name), dpi=300, bbox_extra_artists=(legend,), bbox_inches='tight')
