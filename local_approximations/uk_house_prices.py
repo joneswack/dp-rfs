@@ -406,7 +406,7 @@ def plot_gp_map(
         # run gp
         f_test_mean, f_test_stds, feature_dist, test_feature_time_ms = run_gp(
                 args, config, args.num_rfs,
-                train_data, grid_data, train_labels,
+                train_data, grid_inputs, train_labels,
                 log_lengthscale.exp().item(),
                 log_var.exp().item(),
                 log_noise_var.exp().item(),
