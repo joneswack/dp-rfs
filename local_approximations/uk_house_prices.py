@@ -23,15 +23,16 @@ from random_features.gaussian_approximator import GaussianApproximator
 
 configs = [
     {'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
-    {'method': 'rff', 'proj': 'srht', 'degree': 4, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
+    # {'method': 'rff', 'proj': 'srht', 'degree': 4, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
     # {'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'bias': 0, 'lengthscale': True, 'hierarchical': False, 'complex_weights': True},
     # {'method': 'maclaurin_exp_h01', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
     {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
-    {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': True},
+    {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False, 'single_cluster': True},
+    # {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': True},
     # {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': True},
     # {'method': 'maclaurin_exp_h01', 'proj': 'srht', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
-    {'method': 'maclaurin', 'proj': 'srht', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
-    {'method': 'maclaurin', 'proj': 'srht', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': True}
+    # {'method': 'maclaurin', 'proj': 'srht', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
+    # {'method': 'maclaurin', 'proj': 'srht', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': True}
     # {'method': 'maclaurin', 'proj': 'srht', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': True}
 ]
 
@@ -75,14 +76,14 @@ def parse_args():
                         help='Number of random features')
     parser.add_argument('--num_clusters', type=int, required=False, default=10000,
                         help='Number of random clusters')
-    parser.add_argument('--cluster_method', choices=['random', 'farthest'], required=False, default='farthest',
+    parser.add_argument('--cluster_method', choices=['random', 'farthest'], required=False, default='random',
                         help='Clustering method')
     parser.add_argument('--cluster_train', dest='cluster_train', action='store_true')
     parser.set_defaults(cluster_train=True)
     parser.add_argument('--run_gp_eval', dest='run_gp_eval', action='store_true')
-    parser.set_defaults(run_gp_eval=True)
+    parser.set_defaults(run_gp_eval=False)
     parser.add_argument('--plot_map', dest='plot_map', action='store_true')
-    parser.set_defaults(plot_map=False)
+    parser.set_defaults(plot_map=True)
     parser.add_argument('--use_gpu', dest='use_gpu', action='store_true')
     parser.set_defaults(use_gpu=False)
 
@@ -396,7 +397,11 @@ def plot_gp_map(
     distances = torch.cdist(test_data, cluster_centers, p=2)
     cluster_assignments = distances.argmin(dim=1)
 
+    dummy_assignments = torch.zeros_like(cluster_assignments)
+    dummy_centers = cluster_centers[0].unsqueeze(0)
+
     for j, config in enumerate(configs):
+        dummy_config = ('single_cluster' in config and config['single_cluster'])
         
         # run gp
         f_test_mean, f_test_stds, feature_dist = run_gp(
@@ -405,8 +410,8 @@ def plot_gp_map(
                 log_lengthscale.exp().item(),
                 log_var.exp().item(),
                 log_noise_var.exp().item(),
-                cluster_assignments,
-                cluster_centers
+                dummy_assignments if dummy_config else cluster_assignments,
+                dummy_centers if dummy_config else cluster_centers
         )
 
         test_kl = kl_factorized_gaussian(
@@ -451,22 +456,22 @@ def plot_gp_map(
             levels=level_space
         )
 
-        if cluster_centers is not None:
-            m.scatter(
-                cluster_centers[:,0].cpu().numpy(),
-                cluster_centers[:,1].cpu().numpy(),
-                alpha=0.1, c='black', # np.arange(len(cluster_centers))
-                latlon=True, s=2,
-                cmap='jet'
-            )
+        # if cluster_centers is not None:
+        #     m.scatter(
+        #         cluster_centers[:,0].cpu().numpy(),
+        #         cluster_centers[:,1].cpu().numpy(),
+        #         alpha=0.1, c='black', # np.arange(len(cluster_centers))
+        #         latlon=True, s=2,
+        #         cmap='jet'
+        #     )
 
-            # m.scatter(
-            #     grid_data[0].cpu().numpy(),
-            #     grid_data[1].cpu().numpy(),
-            #     alpha=1, c=cluster_assignments.reshape(len(grid_data[0]),len(grid_data[0])).cpu().numpy(),
-            #     latlon=True, s=2,
-            #     cmap='jet'
-            # )
+        #     m.scatter(
+        #         grid_data[0].cpu().numpy(),
+        #         grid_data[1].cpu().numpy(),
+        #         alpha=1, c=cluster_assignments.reshape(len(grid_data[0]),len(grid_data[0])).cpu().numpy(),
+        #         latlon=True, s=2,
+        #         cmap='jet'
+        #     )
 
     colorbar = fig.colorbar(contour_obj, ax=axes[:], location='bottom', shrink=0.5, pad=0.01)
     colorbar.set_label('log(Sales Price)')
