@@ -367,18 +367,26 @@ def plot_gp_map(
         urcrnrlon=urcrnrlon, urcrnrlat=urcrnrlat
     )
 
+    parallels = np.arange(llcrnrlat,urcrnrlat+1, 1.)
+    # labels = [left,right,top,bottom]
+    m.drawparallels(parallels,labels=[True,False,False,False], labelstyle='+/-', linewidth=0.5, zorder=0, color='lightgray')
+    meridians = np.arange(llcrnrlon, urcrnrlon+1, 1.)
+    m.drawmeridians(meridians,labels=[False,False,False,True], labelstyle='+/-', linewidth=0.5, zorder=0, color='lightgray')
+
     # m.scatter(result['lon'].values, result['lat'].values, latlon=True,
     #           c=np.log(result['price'].values), s=1,
     #           cmap='jet', alpha=1)
 
-    m.drawcoastlines(linewidth = 1.0, color='black')
+    m.drawcoastlines(linewidth = 1.0, color='black', zorder=1)
+
     contour_obj = m.contour(
         grid_data[0].cpu().numpy(),
         grid_data[1].cpu().numpy(),
         (f_test_mean_ref.reshape(len(grid_data[0]), len(grid_data[0]))+label_mean).cpu().numpy(),
         cmap='jet',
         latlon=True,
-        levels=level_space
+        levels=level_space,
+        zorder=2
     )
 
     # determine clusters
@@ -445,14 +453,21 @@ def plot_gp_map(
         #           c=np.log(result['price'].values), s=1,
         #           cmap='jet', alpha=1)
 
-        m.drawcoastlines(linewidth = 1.0, color='black')
+        parallels = np.arange(llcrnrlat,urcrnrlat+1, 1.)
+        # labels = [left,right,top,bottom]
+        m.drawparallels(parallels,labels=[True,False,False,False], labelstyle='+/-', linewidth=0.5, zorder=0, color='lightgray')
+        meridians = np.arange(llcrnrlon, urcrnrlon+1, 1.)
+        m.drawmeridians(meridians,labels=[False,False,False,True], labelstyle='+/-', linewidth=0.5, zorder=0, color='lightgray')
+
+        m.drawcoastlines(linewidth = 1.0, color='black', zorder=1)
         m.contour(
             grid_data[0].cpu().numpy(),
             grid_data[1].cpu().numpy(),
             (f_test_mean.reshape(len(grid_data[0]),len(grid_data[0]))+label_mean).cpu().numpy(),
             cmap='jet',
             latlon=True,
-            levels=level_space
+            levels=level_space,
+            zorder=2
         )
 
         # if cluster_centers is not None:
