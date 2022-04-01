@@ -444,9 +444,10 @@ def plot_gp_map(
         # )
 
         if config['method'] == 'maclaurin':
-            axes[j+1].set_title('{}\n$(D_i)_{{i=1}}^p={}$\nKL Divergence: {}'.format(
+            axes[j+1].set_title('{}\n$(D_i)_{{i=1}}^p={}, p={}$\nKL Divergence: {}'.format(
                 config['name'],
                 str(tuple(feature_dist)),
+                len(feature_dist),
                 int(test_kl)
             ))
         else:
