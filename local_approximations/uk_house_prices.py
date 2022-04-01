@@ -26,8 +26,8 @@ configs = [
     # {'method': 'rff', 'proj': 'srht', 'degree': 4, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
     # {'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'bias': 0, 'lengthscale': True, 'hierarchical': False, 'complex_weights': True},
     # {'method': 'maclaurin_exp_h01', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
-    {'name': 'Macl. Radem. (test points as centers)', 'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
-    {'name': 'Macl. Radem. (training mean as center)', 'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False, 'single_cluster': True},
+    {'name': 'Maclaurin Radem. using $\\hat{{k}}_p$', 'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False, 'single_cluster': True},
+    {'name': 'Maclaurin Radem. using $\\hat{{k}}_p^*$ (this work)', 'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
     # {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': True},
     # {'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': True},
     # {'method': 'maclaurin_exp_h01', 'proj': 'srht', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
@@ -36,6 +36,7 @@ configs = [
     # {'method': 'maclaurin', 'proj': 'srht', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': True}
 ]
 
+# Maclaurin using $k_p$ with $p=9$
 
 # Base map coordinates for the uk
 llcrnrlon=-6
@@ -442,7 +443,11 @@ def plot_gp_map(
         #     test_labels + label_mean
         # )
 
-        axes[j+1].set_title('{}\nKL Divergence: {}'.format(config['name'], int(test_kl)))
+        axes[j+1].set_title('{}\n$(D)_{{i=1}}^p={}$\nKL Divergence: {}'.format(
+            config['name'],
+            str(tuple(feature_dist)),
+            int(test_kl)
+        ))
         m = Basemap(projection='merc',
             resolution = 'i', ax=axes[j+1],
             llcrnrlon=llcrnrlon, llcrnrlat=llcrnrlat,
