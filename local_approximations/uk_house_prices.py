@@ -443,11 +443,18 @@ def plot_gp_map(
         #     test_labels + label_mean
         # )
 
-        axes[j+1].set_title('{}\n$(D)_{{i=1}}^p={}$\nKL Divergence: {}'.format(
-            config['name'],
-            str(tuple(feature_dist)),
-            int(test_kl)
-        ))
+        if config['method'] == 'maclaurin':
+            axes[j+1].set_title('{}\n$(D)_{{i=1}}^p={}$\nKL Divergence: {}'.format(
+                config['name'],
+                str(tuple(feature_dist)),
+                int(test_kl)
+            ))
+        else:
+            axes[j+1].set_title('{}\nKL Divergence: {}'.format(
+                config['name'],
+                int(test_kl)
+            ))
+
         m = Basemap(projection='merc',
             resolution = 'i', ax=axes[j+1],
             llcrnrlon=llcrnrlon, llcrnrlat=llcrnrlat,
