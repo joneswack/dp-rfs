@@ -4,8 +4,6 @@ import matplotlib.pyplot as plt
 import torch
 import pandas as pd
 import os
-# os.environ["PROJ_LIB"] = os.path.join(os.environ["CONDA_PREFIX"], "share", "proj")
-from mpl_toolkits.basemap import Basemap
 
 from tqdm import tqdm
 from timeit import default_timer as timer
