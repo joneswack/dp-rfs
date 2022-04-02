@@ -51,12 +51,12 @@ def regression_scores(test_mean, test_vars, test_labels):
     # since we see two outputs as a diagonal 2d gaussian
     test_mnll = -likelihood.log_cond_prob(test_labels, test_mean).sum(dim=1).mean().item()
     # average is taken also over outputs
-    test_rmse = (test_mean - test_labels).pow(2).mean().sqrt().item()
+    test_mse = (test_mean - test_labels).pow(2).mean().item()
 
     # print('Test mse: {}'.format(test_mse))
     # print('Test MNLL Loss: {}'.format(test_mnll))
 
-    return test_rmse, test_mnll
+    return test_mse, test_mnll
 
 def exact_marginal_log_likelihood(kernel_train, training_labels, log_noise_var):
     n = len(training_labels)

@@ -1,44 +1,79 @@
-import argparse
-import time
-import json
-
-import torch
 import numpy as np
+import pylab as pl
+import matplotlib.pyplot as plt
+import torch
 import pandas as pd
+import os
+# os.environ["PROJ_LIB"] = os.path.join(os.environ["CONDA_PREFIX"], "share", "proj")
+from mpl_toolkits.basemap import Basemap
 
+from tqdm import tqdm
+from timeit import default_timer as timer
+import argparse
+
+import scipy.io
+
+import sys 
+sys.path.append(os.path.join(os.path.dirname(__file__), "../"))
+from util.data import DF_Handler
+from util.kernels import gaussian_kernel
+from util.helper_functions import optimize_marginal_likelihood, kl_factorized_gaussian, regression_scores
+from util.measures import Exponential_Measure
 from models.het_gp import HeteroskedasticGP, predictive_dist_exact
 from random_features.gaussian_approximator import GaussianApproximator
-from random_features.spherical import Spherical
-from random_features.polynomial_sketch import PolynomialSketch
-from random_features.maclaurin import Maclaurin
-from random_features.rff import RFF
-import util.data
 
-from util.helper_functions import kl_factorized_gaussian
-from util.helper_functions import classification_scores, regression_scores
-from util.kernels import gaussian_kernel, polynomial_kernel
-from util.measures import Fixed_Measure, Polynomial_Measure, P_Measure, Exponential_Measure
 
-from util.helper_functions import cholesky_solve
+configs = [
+    {'name': 'Random Fourier Features', 'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
+    # {'method': 'rff', 'proj': 'srht', 'degree': 4, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
+    # {'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'bias': 0, 'lengthscale': True, 'hierarchical': False, 'complex_weights': True},
+    # {'method': 'maclaurin_exp_h01', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
+    {'name': 'Maclaurin Radem. using $\\hat{{k}}_p$', 'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False, 'single_cluster': True},
+    {'name': 'Maclaurin Radem. using $\\hat{{k}}_p^*$ (this work)', 'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
+    {'name': 'Maclaurin T.SRHT using $\\hat{{k}}_p$', 'method': 'maclaurin', 'proj': 'srht', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False, 'single_cluster': True},
+    {'name': 'Maclaurin T.SRHT using $\\hat{{k}}_p^*$ (this work)', 'method': 'maclaurin', 'proj': 'srht', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
+]
 
-from util.LBFGS import FullBatchLBFGS
-
-"""
-Runs Gaussian Process Classification experiments as closed form GP regression on transformed labels.
-"""
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rf_parameter_file', type=str, required=False, default='config/rf_parameters/gaussian2.json',
-                        help='Path to RF parameter file')
-    parser.add_argument('--datasets_file', type=str, required=False, default='config/active_datasets3.json',
-                        help='List of datasets to be used for the experiments')
-    parser.add_argument('--num_data_samples', type=int, required=False, default=5000,
-                        help='Number of data samples for lengthscale estimation')
-    parser.add_argument('--num_mc_samples', type=int, required=False, default=1000,
-                        help='Number of mc samples for predictive distribution')
+    parser.add_argument('--house_price_file', type=str, required=False,
+                        default='../datasets/export/uk_house_prices/pp-monthly-update-new-version.csv',
+                        help='CSV File with the UK house prices')
+    parser.add_argument('--post_code_file', type=str, required=False,
+                        default='../datasets/export/uk_house_prices/ukpostcodes.csv',
+                        help='CSV File with the UK house prices')
+    parser.add_argument('--sarcos_dir', type=str, required=False,
+                        default='../datasets/export/sarcos',
+                        help='Directory of sarcos dataset')
+    parser.add_argument('--dataset', choices=['uk_house_prices', 'sarcos'], required=False, default='sarcos',
+                        help='Which dataset to evaluate')
+    parser.add_argument('--csv_dir', type=str, required=False,
+                        default='csv', help='Directory to save CSV files to')
+    parser.add_argument('--figure_dir', type=str, required=False,
+                        default='figures', help='Directory to save CSV files to')
     parser.add_argument('--num_seeds', type=int, required=False, default=10,
                         help='Number of seeds (runs)')
+    parser.add_argument('--num_train_samples', type=int, required=False, default=10000,
+                        help='Number of data samples for training')
+    parser.add_argument('--num_grid_samples', type=int, required=False, default=100,
+                        help='Number of elements for each grid dimension')
+    parser.add_argument('--num_lml_samples', type=int, required=False, default=5000,
+                        help='Number of data samples for likelihood optimization')
+    parser.add_argument('--lml_lr', type=float, required=False, default=1e-1,
+                        help='Learning rate for likelihood optimization')
+    parser.add_argument('--lml_iterations', type=int, required=False, default=20, # 20
+                        help='Number of iterations for likelihood optimization')
+    parser.add_argument('--num_dist_est_samples', type=int, required=False, default=500,
+                        help='Number of datapoints used to estimate maclaurin distribution')
+    parser.add_argument('--num_rfs', type=int, required=False, default=100,
+                        help='Number of random features')
+    parser.add_argument('--num_clusters', type=int, required=False, default=10000,
+                        help='Number of random clusters')
+    parser.add_argument('--cluster_method', choices=['random', 'farthest'], required=False, default='farthest',
+                        help='Clustering method')
+    parser.add_argument('--cluster_train', dest='cluster_train', action='store_true')
+    parser.set_defaults(cluster_train=True)
     parser.add_argument('--use_gpu', dest='use_gpu', action='store_true')
     parser.set_defaults(use_gpu=False)
 
@@ -46,377 +81,355 @@ def parse_args():
 
     return args
 
+def prepare_house_price_data(args):
+    house_prices_df = pd.read_csv(args.house_price_file, header=None)
 
-def exact_marginal_log_likelihood(kernel_train, training_labels, log_noise_var):
-    n = len(training_labels)
-    L_train = torch.cholesky(kernel_train + torch.exp(log_noise_var) * torch.eye(n, dtype=torch.float), upper=False)
-    alpha = cholesky_solve(training_labels, L_train)
-    mll = -0.5 * training_labels.t().mm(alpha) - L_train.diagonal().log().sum() - (n / 2) * np.log(2*np.pi)
+    columns = [
+        'trans_id',
+        'price',
+        'transfer_date',
+        'postcode',
+        'property_type',
+        'old_new',
+        'duration',
+        'paon',
+        'saon',
+        'street',
+        'locallity',
+        'city',
+        'district',
+        'county',
+        'ppd',
+        'rec_status'
+    ]
+    house_prices_df.columns = columns
 
-    return mll
+    post_code_df = pd.read_csv(args.post_code_file, header=None, index_col=0)
+    post_code_df.columns = ['postcode', 'lat', 'lon']
 
-def optimize_marginal_likelihood(training_data, training_labels, kernel_fun, log_lengthscale, log_var, log_noise_var, num_iterations=10, lr=1e-3):
-    trainable_params = [log_lengthscale, log_var, log_noise_var]
+    result = pd.merge(house_prices_df, post_code_df, how="inner", on=['postcode'])
 
-    for iteration in range(num_iterations):
-        print('### Iteration {} ###'.format(iteration))
-        optimizer = FullBatchLBFGS(trainable_params, lr=lr, history_size=10, line_search='Wolfe')
+    result = result[~result['lat'].isnull()]
+    result = result[result['property_type']=='F']
 
-        def closure():
-            optimizer.zero_grad()
+    data = torch.from_numpy(result[['lon', 'lat']].values).float()
+    labels = torch.from_numpy(result['price'].values).log().unsqueeze(1).float()
 
-            kernel_train = kernel_fun(training_data, training_data)
-            loss = - exact_marginal_log_likelihood(kernel_train, training_labels, log_noise_var)
-            print('Loss: {}'.format(loss.item()))
+    return data, labels
 
-            return loss
+def prepare_sarcos_data(args):
 
-        loss = closure()
-        loss.backward()
-        options = {'closure': closure, 'current_loss': loss, 'max_ls': 10}
-        loss, _, lr, _, F_eval, G_eval, _, _ = optimizer.step(options)
+    train = scipy.io.loadmat(os.path.join(args.sarcos_dir, 'sarcos_inv.mat'))['sarcos_inv']
+    test = scipy.io.loadmat(os.path.join(args.sarcos_dir, 'sarcos_inv_test.mat'))['sarcos_inv_test']
 
+    # we use only the first of the 7 joint torques
+    # TODO: maybe standardize the data
+    train_data = torch.from_numpy(train[:,:21]).float()
+    train_labels = torch.from_numpy(train[:, 21][:, np.newaxis]).float()
+    test_data = torch.from_numpy(test[:,:21]).float()
+    test_labels = torch.from_numpy(test[:, 21][:, np.newaxis]).float()
 
-def prepare_data(config, args, rf_parameters, data_name, current_train, current_test, train_labels, test_labels,
-                    noise_var, regression=False, fit_ref_gp=False):
-    
-    train_idxs = torch.randperm(len(current_train))[:args.num_data_samples]
-    test_idxs = torch.randperm(len(current_test))[:args.num_data_samples]
+    return (train_data, test_data), (train_labels, test_labels)
 
-    if regression:
-        vv = torch.ones_like(train_labels) * noise_var
-        mm = train_labels
-        ymean = train_labels.mean(0)
-    else:
-        # we convert the training labels according to Milios et al., 2018
-        vv = torch.log(1.0 + 1.0 / (train_labels + noise_var))
-        mm = torch.log(train_labels + noise_var) - vv / 2.0
-        ymean = train_labels.mean(0).log() + torch.mean(mm-train_labels.mean(0).log())
+def cluster_points(data, num_clusters=10, method='random', global_max_dist=1.):
 
-    mm = mm - ymean
-    kernel_var = mm.var().item()
+    shuffled_data = data[torch.randperm(len(data))]
 
-    current_train, current_test = util.data.standardize_data(current_train, current_test)
-    lengthscale = torch.cdist(current_train[train_idxs], current_train[train_idxs]).median().item()
+    # determine cluster centers
+    if method=='farthest':
+        cluster_centers = [shuffled_data.mean(dim=0)]
 
-    if fit_ref_gp and regression:
-        # optionally fit reference GP
-        log_noise_var = torch.nn.Parameter((torch.ones(1) * noise_var).log(), requires_grad=False)
-        log_lengthscale = torch.nn.Parameter((torch.ones(1) * lengthscale).log(), requires_grad=True)
-        log_var = torch.nn.Parameter((torch.ones(1) * kernel_var).log(), requires_grad=True)
+        for _ in range(num_clusters-1):
+            distances = torch.cdist(shuffled_data, torch.stack(cluster_centers, dim=0), p=2)
 
-        # kernel_fun = lambda x, y: rbf_kernel(x, y, lengthscale=1.)
-        kernel_fun = lambda x, y: log_var.exp() * gaussian_kernel(x, y, lengthscale=log_lengthscale.exp())
+            # distances to the closest cluster centers
+            min_dists = distances.min(dim=1)[0]
 
-        print('Lengthscale:', log_lengthscale.exp().item())
-        print('Kernel var:', log_var.exp().item())
-        print('Noise var:', log_noise_var.exp().item())
+            if min_dists.max() <= global_max_dist:
+                break
 
-        optimize_marginal_likelihood(
-            current_train, mm, kernel_fun, log_lengthscale, log_var, log_noise_var, num_iterations=100, lr=1e-2
-        )
+            farthest_point = min_dists.argmax()
+            cluster_centers.append(shuffled_data[farthest_point])
 
-        kernel_var = log_var.exp().item()
-        lengthscale = log_lengthscale.exp().item() / 4.
-        noise_var = log_noise_var.exp().item()
+        print('Number of clusters found: {}'.format(len(cluster_centers)))
+        cluster_centers = torch.stack(cluster_centers, dim=0)
+    elif method == 'random':
+        cluster_centers = shuffled_data[:num_clusters]
 
-        print('Lengthscale:', lengthscale)
-        print('Kernel var:', kernel_var)
-        print('Noise var:', noise_var)
-
+    return cluster_centers
 
 
-    kernel_fun = lambda x, y: kernel_var * gaussian_kernel(
-        x, y, lengthscale=lengthscale)
+def compute_local_predictions(
+        train_data, test_data, train_labels,
+        cluster_assignments, cluster_centers,
+        feature_encoder, noise_var):
 
-    # float conversion
-    current_train = current_train.float()
-    current_test = current_test.float()
-    train_labels = train_labels.float()
-    test_labels = test_labels.float()
-    mm = mm.float()
-    vv = vv.float()
-    ref_kernel = kernel_fun(current_test[test_idxs], current_test[test_idxs])
-
-    f_test_mean_ref, f_test_stds_ref = predictive_dist_exact(
-        current_train[train_idxs],
-        current_test[test_idxs],
-        mm[train_idxs], vv[train_idxs], kernel_fun
+    predictive_means = torch.zeros(
+        len(test_data), 1,
+        dtype=train_data.dtype, device=train_data.device
     )
+    predictive_stds = torch.zeros_like(predictive_means)
 
-    meta_data_dict = {
-        'data_name': data_name,
-        'train_data': current_train,
-        'test_data': current_test,
-        'train_labels': mm,
-        'train_label_mean': ymean,
-        'train_label_vars': vv,
-        'test_labels': test_labels,
-        'lengthscale': lengthscale,
-        'kernel_var': kernel_var,
-        'noise_var': noise_var,
-        'ref_kernel': ref_kernel,
-        'f_test_mean_ref': f_test_mean_ref,
-        'f_test_stds_ref': f_test_stds_ref,
-        'train_idxs': train_idxs,
-        'test_idxs': test_idxs,
-        'regression': regression
-    }
+    test_feature_time_ms = 0
+        
+    for cluster_id, cluster_center in tqdm(enumerate(cluster_centers)):
+        if (cluster_assignments==cluster_id).sum()==0:
+            # skip empty clusters
+            continue
 
-    return meta_data_dict
+        train_features = feature_encoder.forward(train_data - cluster_center)
 
-def evaluate_test_points(feature_encoder, het_gp, train_data_padded, test_data_padded, train_labels, train_label_vars):
+        torch.cuda.synchronize()
+        start = timer()
+        test_features = feature_encoder.forward(test_data[cluster_assignments==cluster_id] - cluster_center)
+        torch.cuda.synchronize()
+        test_feature_time_ms += (timer() - start) * 1000
 
-    if isinstance(feature_encoder.feature_encoder, Maclaurin):
-        test_means = []
-        test_stds = []
+        het_gp = HeteroskedasticGP(None)
 
-        for test_point_padded in test_data_padded:
-            train_features = feature_encoder.forward(train_data_padded - test_point_padded) #   
-            test_features = feature_encoder.forward(torch.zeros_like(test_point_padded).unsqueeze(0)) # torch.zeros_like(test_point_padded).unsqueeze(0)
-
-            ### run subsampled GP for KL divergence
-            f_test_mean, f_test_stds = het_gp.predictive_dist(
-                train_features, test_features,
-                train_labels, train_label_vars
-            )
-
-            test_means.append(f_test_mean)
-            test_stds.append(f_test_stds)
-
-        return torch.cat(test_means, dim=0), torch.cat(test_stds, dim=0)
-
-    else:
-        train_features = feature_encoder.forward(train_data_padded)
-        test_features = feature_encoder.forward(test_data_padded)
-
-        ### run subsampled GP for KL divergence
         f_test_mean, f_test_stds = het_gp.predictive_dist(
             train_features, test_features,
-            train_labels, train_label_vars
+            train_labels, noise_var * torch.ones_like(train_labels)
         )
 
-        return f_test_mean, f_test_stds
+        predictive_means[cluster_assignments==cluster_id] = f_test_mean
+        predictive_stds[cluster_assignments==cluster_id] = f_test_stds
+
+    return predictive_means, predictive_stds, test_feature_time_ms
 
 
-def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
-
-    if (rf_params['kernel'] == 'polynomial' and config['method'] == 'poly_sketch' and config['bias'] != 0) \
-        or (rf_params['kernel'] == 'gaussian' and config['method'] == 'poly_sketch'):
-        offset = 1
-    else:
-        offset = 0
-
-    comp_real = config['complex_real'] if 'complex_real' in config.keys() else False
-    full_cov = config['full_cov'] if 'full_cov' in config.keys() else False
-    
-    train_data_padded = util.data.pad_data_pow_2(data_dict['train_data'], offset=offset)
-    test_data_padded = util.data.pad_data_pow_2(data_dict['test_data'], offset=offset)
-    train_idxs = data_dict['train_idxs']
-    test_idxs = data_dict['test_idxs']
-    train_labels = data_dict['train_labels']
-    train_label_mean = data_dict['train_label_mean']
-    train_label_vars = data_dict['train_label_vars']
-    test_labels = data_dict['test_labels']
-    noise_var = data_dict['noise_var']
-    ref_kernel = data_dict['ref_kernel']
-    f_test_mean_ref = data_dict['f_test_mean_ref']
-    f_test_stds_ref = data_dict['f_test_stds_ref']
-    regression = data_dict['regression']
+def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, var, noise_var, cluster_assignments, cluster_centers):
 
     feature_encoder = GaussianApproximator(
-        train_data_padded.shape[1], d_features,
-        approx_degree=rf_params['max_sampling_degree'], lengthscale=data_dict['lengthscale'],
-        var=data_dict['kernel_var'], trainable_kernel=False, method=config['method'],
-        projection_type=config['proj'], hierarchical=config['hierarchical'],
-        complex_weights=config['complex_weights'], device=('cuda' if args.use_gpu else 'cpu')
-    )
-    feature_encoder.initialize_sampling_distribution(train_data_padded[train_idxs],
-        min_sampling_degree=rf_params['min_sampling_degree'])
-    # feature_encoder.feature_encoder.measure = Exponential_Measure(True)
-
-    feature_encoder.resample()
-
-    het_gp = HeteroskedasticGP(None)
-
-    # evaluate each test point
-    f_test_mean, f_test_stds = evaluate_test_points(
-        feature_encoder, het_gp,
-        train_data_padded, test_data_padded,
-        train_labels, train_label_vars
+        2, D,
+        approx_degree=config['degree'],
+        lengthscale=lengthscale, var=var,
+        trainable_kernel=False,
+        method=config['method'],
+        projection_type=config['proj'],
+        hierarchical=config['hierarchical'],
+        complex_weights=config['complex_weights'],
+        complex_real=config['complex_real']
     )
 
-    test_kl = kl_factorized_gaussian(
-        f_test_mean[test_idxs], f_test_mean_ref,
-        f_test_stds[test_idxs], f_test_stds_ref
-    ).sum(dim=0).mean()
-    test_mean_mse = (f_test_mean_ref - f_test_mean[test_idxs]).pow(2).mean()
-    test_var_mse = (f_test_stds_ref**2 - f_test_stds[test_idxs]**2).pow(2).mean()
+    if args.use_gpu:
+        feature_encoder.cuda()
 
-    ### gp prediction
-    # torch.cuda.synchronize()
-    start = time.time()
+    if config['method'] == 'maclaurin' or config['method'] == 'maclaurin_exp_h01':
+        feature_encoder.initialize_sampling_distribution(
+            train_data[:args.num_dist_est_samples] - train_data[:args.num_dist_est_samples].mean(dim=0)
+        )
 
-    if regression:
-        f_test_mean += train_label_mean
-        # test rmse
-        test_error, test_mnll = regression_scores(f_test_mean, f_test_stds**2 + noise_var, test_labels)
-    else:
-        epsilon = torch.randn(args.num_mc_samples, *f_test_mean.shape, device=train_data.device)
-        test_predictions = f_test_mean + f_test_stds * epsilon
-
-        test_predictions += train_label_mean
-        test_error, test_mnll = classification_scores(test_predictions, test_labels)
-
-    test_label_var = test_labels.var(unbiased=False).item()
-
-    if isinstance(feature_encoder, GaussianApproximator):
-        if config['method'] == 'maclaurin' and hasattr(feature_encoder.feature_encoder.measure, 'distribution'):
-            feature_dist = str(feature_encoder.feature_encoder.measure.distribution)
+        if config['method'] == 'maclaurin':
+            feature_dist = feature_encoder.feature_encoder.measure.distribution
         else:
             feature_dist = None
+        # feature_encoder.feature_encoder.measure.distribution = np.array(D * [1])
 
-    feature_time = 0
-    prediction_time = 0
+        feature_encoder.resample()
 
-    log_dir = {
-        'dataset': data_name,
-        'method': config['method'],
-        'degree': config['degree'],
-        'bias': config['bias'],
-        'proj': config['proj'],
-        'comp': config['complex_weights'],
-        'comp_real': comp_real,
-        'full_cov': full_cov,
-        'hier': config['hierarchical'],
-        'kernel_var': feature_encoder.log_var.exp().item(),
-        'kernel_len': feature_encoder.log_lengthscale.exp().item(),
-        'test_error': test_error,
-        'test_mnll': test_mnll,
-        'test_label_var': test_label_var,
-        'test_kl': test_kl.item(),
-        'test_mean_mse': test_mean_mse.item(),
-        'test_var_mse': test_var_mse.item(),
-        'D': d_features,
-        'feature_dist': feature_dist,
-        'noise_var': noise_var,
-        'feature_time': feature_time,
-        'pred_time': prediction_time,
-        'seed': seed
-    }
-        
-    return log_dir
+        if args.use_gpu:
+            feature_encoder.cuda()
+            feature_encoder.feature_encoder.move_submodules_to_cuda()
+
+        predictive_means, predictive_stds, test_feature_time_ms = compute_local_predictions(
+            train_data, test_data, train_labels,
+            cluster_assignments, cluster_centers,
+            feature_encoder, noise_var
+        )
+    else:
+        feature_encoder.resample()
+
+        cluster_assignments = cluster_centers = feature_dist = None
+
+        if args.use_gpu:
+            feature_encoder.cuda()
+
+        train_features = feature_encoder.forward(train_data)
+
+        torch.cuda.synchronize()
+        start = timer()
+        test_features = feature_encoder.forward(test_data)
+        torch.cuda.synchronize()
+        test_feature_time_ms = (timer() - start) * 1000
+
+        het_gp = HeteroskedasticGP(None)
+
+        predictive_means, predictive_stds = het_gp.predictive_dist(
+            train_features, test_features,
+            train_labels, noise_var * torch.ones_like(train_labels)
+        )
+
+    return predictive_means, predictive_stds, feature_dist, test_feature_time_ms
+
+
+def run_gp_eval(
+        train_data, test_data, train_labels, test_labels, label_mean,
+        log_lengthscale, log_var, log_noise_var, args, csv_handler, seed
+    ):
+
+    # ground truth GP
+    while True:
+        try:
+            kernel_fun = lambda x, y: log_var.exp().item() * gaussian_kernel(x, y, lengthscale=log_lengthscale.exp().item())
+            f_test_mean_ref, f_test_stds_ref = predictive_dist_exact(
+                train_data, test_data, train_labels, log_noise_var.exp().item() * torch.ones_like(train_labels), kernel_fun
+            )
+            break
+        except RuntimeError:
+            log_noise_var.data = (log_noise_var.exp()*1.1).log()
+            print('Inversion error. New noise var:', log_noise_var.exp().item())
+            continue
+
+
+    for lengthscale_multiplier in [2**i for i in range(-3, 5, 1)]:
+        # determine clusters
+        if args.cluster_train:
+            cluster_centers = cluster_points(
+                train_data,
+                num_clusters=args.num_clusters,
+                method=args.cluster_method,
+                global_max_dist=lengthscale_multiplier*log_lengthscale.exp().item()
+            )
+        else:
+            cluster_centers = cluster_points(
+                test_data,
+                num_clusters=args.num_clusters,
+                method=args.cluster_method,
+                global_max_dist=lengthscale_multiplier*log_lengthscale.exp().item()
+            )
+
+        # assign clusters
+        torch.cuda.synchronize()
+        start = timer()
+        distances = torch.cdist(test_data, cluster_centers, p=2)
+        cluster_assignments = distances.argmin(dim=1)
+        torch.cuda.synchronize()
+        cluster_assignment_time_ms = (timer() - start) * 1000
+
+        for D in [8, 16, 32, 64, 128, 256, 512, 1024]:
+        # D = args.num_rfs
+
+            for config in configs:
+                f_test_mean, f_test_stds, feature_dist, test_feature_time_ms = run_gp(
+                    args, config, D,
+                    train_data, test_data, train_labels,
+                    log_lengthscale.exp().item(),
+                    log_var.exp().item(),
+                    log_noise_var.exp().item(),
+                    cluster_assignments,
+                    cluster_centers
+                )
+
+                test_kl = kl_factorized_gaussian(
+                    f_test_mean+label_mean,
+                    f_test_mean_ref+label_mean,
+                    (f_test_stds**2+log_noise_var.exp()).sqrt(),
+                    (f_test_stds_ref**2+log_noise_var.exp()).sqrt()
+                ).sum(dim=0).mean().item()
+                
+                test_mean_mse = (f_test_mean_ref - f_test_mean).pow(2).mean().item()
+                test_var_mse = (f_test_stds_ref**2 - f_test_stds**2).pow(2).mean().item()
+
+                test_mse, test_mnll = regression_scores(
+                    f_test_mean+label_mean,
+                    f_test_stds**2 + log_noise_var.exp().item(),
+                    test_labels + label_mean
+                )
+
+                feature_dist = str(feature_dist)
+
+                log_dir = {
+                    'seed': seed,
+                    'N': args.num_train_samples,
+                    'D': D,
+                    'num_clusters': len(cluster_centers) if cluster_centers is not None else None,
+                    'lengthscale_mult': lengthscale_multiplier,
+                    'lengthscale': log_lengthscale.exp().item(),
+                    'kernel_var': log_var.exp().item(),
+                    'noise_var': log_noise_var.exp().item(),
+                    'method': config['method'],
+                    'proj': config['proj'],
+                    'ctr': config['complex_real'],
+                    'feature_dist': feature_dist,
+                    'mse': test_mse,
+                    'rmse': np.sqrt(test_mse),
+                    'smse': test_mse / test_labels.var().item(),
+                    'test_kl': test_kl,
+                    'test_mnll': test_mnll,
+                    'test_mean_mse': test_mean_mse,
+                    'test_var_mse': test_var_mse,
+                    'cluster_time_ms': cluster_assignment_time_ms,
+                    'test_feature_time_ms': test_feature_time_ms
+                }
+
+                csv_handler.append(log_dir)
+                csv_handler.save()
 
 
 if __name__ == '__main__':
     args = parse_args()
 
-    # load RF and dataset config file
-    try:
-        with open(args.rf_parameter_file) as json_file:
-            rf_parameters = json.load(json_file)
-        with open(args.datasets_file) as json_file:
-            datasets = json.load(json_file)
-    except Exception as e:
-        print('Cound not load file!', e)
-        exit()
+    csv_handler = DF_Handler(args.dataset, 'cluster_selection', csv_dir=args.csv_dir)
 
-    start_time = time.time()
+    seeds = args.num_seeds if args.run_gp_eval else 1
 
-    for dataset_config in datasets['regression'] + datasets['classification']:
-        print('Loading dataset: {}'.format(dataset_config))
-        torch.manual_seed(42)
-        np.random.seed(42)
+    if args.dataset == 'uk_house_prices':
+        data, labels = prepare_house_price_data(args)
+    else:
+        (train_data, test_data), (train_labels, test_labels) = prepare_sarcos_data(args)
 
-        data = util.data.load_dataset(dataset_config, standardize=False, maxmin=False, normalize=False, split_size=0.9)
-        data_name, train_data, test_data, train_labels, test_labels = data
-        
-        regression = False if dataset_config in datasets['classification'] else True
+
+    for seed in range(seeds):
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+
+        if args.dataset == 'uk_house_prices':
+            # shuffle data
+            permutation = torch.randperm(len(data))
+            data = data[permutation]
+            labels = labels[permutation]
+
+            train_data = data[:args.num_train_samples]
+            train_labels = labels[:args.num_train_samples]
+            test_data = data[args.num_train_samples:]
+            test_labels = labels[args.num_train_samples:]
+
+
+        label_mean = train_labels.mean()
+        train_labels -= label_mean
+        test_labels -= label_mean
 
         if args.use_gpu:
             train_data = train_data.cuda()
             train_labels = train_labels.cuda()
             test_data = test_data.cuda()
             test_labels = test_labels.cuda()
+            label_mean = label_mean.cuda()
 
-        pow_2_shape = int(2**np.ceil(np.log2(train_data.shape[1])))
-        n_samples = train_data.shape[0] + test_data.shape[0]
+        noise_var = 1.0
+        log_noise_var = torch.nn.Parameter((torch.ones(1, device=('cuda' if args.use_gpu else 'cpu')) * noise_var).log(), requires_grad=True)
+        log_lengthscale = torch.nn.Parameter(torch.cdist(train_data[:args.num_lml_samples], train_data[:args.num_lml_samples]).median().log(), requires_grad=True)
+        log_var = torch.nn.Parameter((torch.ones(1, device=('cuda' if args.use_gpu else 'cpu')) * train_labels.var().log()), requires_grad=True)
 
-        log_handler = util.data.Log_Handler(rf_parameters['save_name'], '{}_d{}_n{}'.format(data_name, pow_2_shape, n_samples))
-        csv_handler = util.data.DF_Handler(rf_parameters['save_name'], '{}_d{}_n{}'.format(data_name, pow_2_shape, n_samples))
-        baseline_config = rf_parameters['baseline_config']
+        kernel_fun = lambda x, y: log_var.exp() * gaussian_kernel(x, y, lengthscale=log_lengthscale.exp())
 
-        baseline_config['bias'] = 0
-        baseline_config['degree'] = 0
-        if 'hierarchical' not in baseline_config.keys():
-            baseline_config['hierarchical'] = False
-
-        noise_var_opt = 4 #10**(-2)
-
-        data_dict = prepare_data(
-            # for the polynomial kernel we need to pass on the kernel parameters or kernel function
-            baseline_config, args, rf_parameters, data_name,
-            train_data, test_data, train_labels, test_labels,
-            noise_var_opt, regression=regression, fit_ref_gp=True
+        optimize_marginal_likelihood(
+            train_data[:args.num_lml_samples],
+            train_labels[:args.num_lml_samples],
+            kernel_fun, log_lengthscale,
+            log_var,
+            log_noise_var,
+            num_iterations=args.lml_iterations,
+            lr=args.lml_lr
         )
-
-        noise_var_opt = data_dict['noise_var']
         
-        configurations = rf_parameters['configurations']
+        print('Lengthscale:', log_lengthscale.exp().item())
+        print('Kernel var:', log_var.exp().item())
+        print('Noise var:', log_noise_var.exp().item())
 
-        print('Comparing approximations...')
-        
-        dimensions = [pow_2_shape * i for i in range(
-            rf_parameters['projection_range']['min'],
-            rf_parameters['projection_range']['max']+1,
-            rf_parameters['projection_range']['step']
-        )]
-
-        for seed in range(args.num_seeds):
-            torch.manual_seed(seed)
-            np.random.seed(seed)
-            # create new train/val split for UCI datasets
-            # if data_name not in ['MNIST', 'FashionMNIST', 'Adult', 'Cod_rna']:
-            #     train_data = torch.cat([train_data, test_data], dim=0)
-            #     train_labels = torch.cat([train_labels, test_labels], dim=0)
-            #     current_train, current_test, current_train_labels, current_test_labels = util.data.create_train_val_split(train_data, train_labels, train_size=0.9)
-            # else:
-            #     current_train, current_test = train_data, test_data
-            #     current_train_labels, current_test_labels = train_labels, test_labels
-
-            # data_dict = prepare_data(
-            #     # for the polynomial kernel we need to pass on the kernel parameters or kernel function
-            #     baseline_config, args, rf_parameters, data_name,
-            #     current_train, current_test, current_train_labels, current_test_labels,
-            #     noise_var_opt, regression=regression
-            # )
-
-            # del current_train, current_test
-
-            for d_features in dimensions:
-                for config in configurations:
-                    # add bias, lengthscale and degree for the polynomial kernel
-                    if rf_parameters['kernel'] == 'polynomial':
-                        config['bias'] = baseline_config['bias']
-                        config['lengthscale'] = baseline_config['lengthscale']
-                        config['degree'] = baseline_config['degree']
-                    else:
-                        config['bias'] = 0
-                        config['degree'] = 0
-                    if 'hierarchical' not in config.keys():
-                        config['hierarchical'] = False
-
-                    with torch.no_grad():
-                        # try:
-                        log_dir = run_rf_gp(data_dict, d_features, config, args, rf_parameters, seed)
-                        log_handler.append(log_dir)
-                        csv_handler.append(log_dir)
-                        csv_handler.save()
-                        # except Exception as e:
-                        #     print(e)
-                        #     print('Skipping current configuration...')
-                        #     continue
-
-
-        print('Total execution time: {:.2f}'.format(time.time()-start_time))
-        print('Done!')
+        ### Run comparisons across feature dimensions and seeds ###
+        run_gp_eval(
+            train_data, test_data, train_labels, test_labels, label_mean,
+            log_lengthscale, log_var, log_noise_var, args, csv_handler, seed
+        )
