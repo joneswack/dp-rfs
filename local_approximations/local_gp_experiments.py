@@ -13,6 +13,7 @@ import scipy.io
 
 import sys 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../"))
+import util.data
 from util.data import DF_Handler
 from util.kernels import gaussian_kernel
 from util.helper_functions import optimize_marginal_likelihood, kl_factorized_gaussian, regression_scores
@@ -23,7 +24,7 @@ from random_features.gaussian_approximator import GaussianApproximator
 
 configs = [
     {'name': 'Random Fourier Features', 'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
-    # {'method': 'rff', 'proj': 'srht', 'degree': 4, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
+    {'name': 'Struct. Orth. RFF', 'method': 'rff', 'proj': 'srht', 'degree': 4, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
     # {'method': 'rff', 'proj': 'gaussian', 'degree': 4, 'bias': 0, 'lengthscale': True, 'hierarchical': False, 'complex_weights': True},
     # {'method': 'maclaurin_exp_h01', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False},
     {'name': 'Maclaurin Radem. using $\\hat{{k}}_p$', 'method': 'maclaurin', 'proj': 'rademacher', 'degree': 15, 'hierarchical': False, 'complex_weights': False, 'complex_real': False, 'single_cluster': True},
@@ -44,7 +45,10 @@ def parse_args():
     parser.add_argument('--sarcos_dir', type=str, required=False,
                         default='../datasets/export/sarcos',
                         help='Directory of sarcos dataset')
-    parser.add_argument('--dataset', choices=['uk_house_prices', 'sarcos'], required=False, default='sarcos',
+    parser.add_argument('--kin40k_dir', type=str, required=False,
+                        default='../datasets/export/kin40k',
+                        help='Directory of kin-40k dataset')
+    parser.add_argument('--dataset', choices=['uk_house_prices', 'sarcos', 'kin40k'], required=False, default='kin40k',
                         help='Which dataset to evaluate')
     parser.add_argument('--csv_dir', type=str, required=False,
                         default='csv', help='Directory to save CSV files to')
@@ -58,7 +62,7 @@ def parse_args():
                         help='Number of elements for each grid dimension')
     parser.add_argument('--num_lml_samples', type=int, required=False, default=5000,
                         help='Number of data samples for likelihood optimization')
-    parser.add_argument('--lml_lr', type=float, required=False, default=1e-1,
+    parser.add_argument('--lml_lr', type=float, required=False, default=1e-1, # 1e-1
                         help='Learning rate for likelihood optimization')
     parser.add_argument('--lml_iterations', type=int, required=False, default=20, # 20
                         help='Number of iterations for likelihood optimization')
@@ -68,10 +72,10 @@ def parse_args():
                         help='Number of random features')
     parser.add_argument('--num_clusters', type=int, required=False, default=10000,
                         help='Number of random clusters')
-    parser.add_argument('--cluster_method', choices=['random', 'farthest'], required=False, default='farthest',
+    parser.add_argument('--cluster_method', choices=['random', 'farthest'], required=False, default='random',
                         help='Clustering method')
     parser.add_argument('--cluster_train', dest='cluster_train', action='store_true')
-    parser.set_defaults(cluster_train=True)
+    parser.set_defaults(cluster_train=False)
     parser.add_argument('--use_gpu', dest='use_gpu', action='store_true')
     parser.set_defaults(use_gpu=False)
 
@@ -127,6 +131,38 @@ def prepare_sarcos_data(args):
     test_data = torch.from_numpy(test[:,:21]).float()
     test_labels = torch.from_numpy(test[:, 21][:, np.newaxis]).float()
 
+
+    train_mean = train_data.mean(dim=0)
+    train_std = train_data.std(dim=0)
+    train_std[train_std==0] = 1.
+
+    train_data = (train_data - train_mean) / train_std
+    test_data = (test_data - train_mean) / train_std
+
+    # pad to power of 2
+    train_data = util.data.pad_data_pow_2(train_data, offset=0)
+    test_data = util.data.pad_data_pow_2(test_data, offset=0)
+
+    return (train_data, test_data), (train_labels, test_labels)
+
+def prepare_kin40k_data(args):
+
+    train_data = torch.from_numpy(pd.read_csv(os.path.join(args.kin40k_dir, 'kin40k_train_data.asc'), sep='\s+', header=None).values).float()
+    train_labels = torch.from_numpy(pd.read_csv(os.path.join(args.kin40k_dir, 'kin40k_train_labels.asc'), sep='\s+', header=None).values).float()
+    test_data = torch.from_numpy(pd.read_csv(os.path.join(args.kin40k_dir, 'kin40k_test_data.asc'), sep='\s+', header=None).values).float()
+    test_labels = torch.from_numpy(pd.read_csv(os.path.join(args.kin40k_dir, 'kin40k_test_labels.asc'), sep='\s+', header=None).values).float()
+
+    train_mean = train_data.mean(dim=0)
+    train_std = train_data.std(dim=0)
+    train_std[train_std==0] = 1.
+
+    train_data = (train_data - train_mean) / train_std
+    test_data = (test_data - train_mean) / train_std
+
+    # pad to power of 2
+    train_data = util.data.pad_data_pow_2(train_data, offset=0)
+    test_data = util.data.pad_data_pow_2(test_data, offset=0)
+
     return (train_data, test_data), (train_labels, test_labels)
 
 def cluster_points(data, num_clusters=10, method='random', global_max_dist=1.):
@@ -179,7 +215,10 @@ def compute_local_predictions(
 
         torch.cuda.synchronize()
         start = timer()
-        test_features = feature_encoder.forward(test_data[cluster_assignments==cluster_id] - cluster_center)
+        assigned_test_data = test_data[cluster_assignments==cluster_id]
+        if assigned_test_data.dim() == 1:
+            assigned_test_data = assigned_test_data.unsqueeze(dim=0)
+        test_features = feature_encoder.forward(assigned_test_data - cluster_center)
         torch.cuda.synchronize()
         test_feature_time_ms += (timer() - start) * 1000
 
@@ -199,7 +238,7 @@ def compute_local_predictions(
 def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, var, noise_var, cluster_assignments, cluster_centers):
 
     feature_encoder = GaussianApproximator(
-        2, D,
+        train_data.shape[1], D,
         approx_degree=config['degree'],
         lengthscale=lengthscale, var=var,
         trainable_kernel=False,
@@ -268,19 +307,25 @@ def run_gp_eval(
 
     # ground truth GP
     while True:
-        try:
-            kernel_fun = lambda x, y: log_var.exp().item() * gaussian_kernel(x, y, lengthscale=log_lengthscale.exp().item())
-            f_test_mean_ref, f_test_stds_ref = predictive_dist_exact(
-                train_data, test_data, train_labels, log_noise_var.exp().item() * torch.ones_like(train_labels), kernel_fun
-            )
-            break
-        except RuntimeError:
-            log_noise_var.data = (log_noise_var.exp()*1.1).log()
-            print('Inversion error. New noise var:', log_noise_var.exp().item())
-            continue
+        # try:
+        kernel_fun = lambda x, y: log_var.exp().item() * gaussian_kernel(x, y, lengthscale=log_lengthscale.exp())
+        f_test_mean_ref, f_test_stds_ref = predictive_dist_exact(
+            train_data, test_data, train_labels, log_noise_var.exp().item() * torch.ones_like(train_labels), kernel_fun
+        )
+        break
+        # except RuntimeError:
+        #     log_noise_var.data = (log_noise_var.exp()*1.1).log()
+        #     print('Inversion error. New noise var:', log_noise_var.exp().item())
+        #     continue
 
+    lengthscale_multiplier_min = -3 if args.dataset == 'uk_house_prices' else 0
 
-    for lengthscale_multiplier in [2**i for i in range(-3, 5, 1)]:
+    if args.cluster_train:
+        lengthscale_multipliers = [2**i for i in range(lengthscale_multiplier_min, 5, 1)]
+    else:
+        lengthscale_multipliers = [-1]
+
+    for lengthscale_multiplier in lengthscale_multipliers:
         # determine clusters
         if args.cluster_train:
             cluster_centers = cluster_points(
@@ -305,18 +350,30 @@ def run_gp_eval(
         torch.cuda.synchronize()
         cluster_assignment_time_ms = (timer() - start) * 1000
 
-        for D in [8, 16, 32, 64, 128, 256, 512, 1024]:
+        if args.dataset == 'uk_house_prices':
+            Ds = [8, 16, 32, 64, 128, 256, 512, 1024]
+        elif args.dataset == 'sarcos':
+            Ds = [32, 64, 128, 256, 256, 512, 1024]
+        elif args.dataset == 'kin40k':
+            Ds = [32, 64, 128, 256, 256, 512, 1024]
+
+        dummy_assignments = torch.zeros_like(cluster_assignments)
+        dummy_centers = train_data.mean(dim=0).unsqueeze(0)
+
+        for D in Ds:
         # D = args.num_rfs
 
             for config in configs:
+                dummy_config = ('single_cluster' in config and config['single_cluster'])
+
                 f_test_mean, f_test_stds, feature_dist, test_feature_time_ms = run_gp(
                     args, config, D,
                     train_data, test_data, train_labels,
                     log_lengthscale.exp().item(),
                     log_var.exp().item(),
                     log_noise_var.exp().item(),
-                    cluster_assignments,
-                    cluster_centers
+                    dummy_assignments if dummy_config else cluster_assignments,
+                    dummy_centers if dummy_config else cluster_centers
                 )
 
                 test_kl = kl_factorized_gaussian(
@@ -341,7 +398,7 @@ def run_gp_eval(
                     'seed': seed,
                     'N': args.num_train_samples,
                     'D': D,
-                    'num_clusters': len(cluster_centers) if cluster_centers is not None else None,
+                    'num_clusters': len(cluster_centers) if (config['method']=='maclaurin' and not dummy_config) else None,
                     'lengthscale_mult': lengthscale_multiplier,
                     'lengthscale': log_lengthscale.exp().item(),
                     'kernel_var': log_var.exp().item(),
@@ -370,15 +427,15 @@ if __name__ == '__main__':
 
     csv_handler = DF_Handler(args.dataset, 'cluster_selection', csv_dir=args.csv_dir)
 
-    seeds = args.num_seeds if args.run_gp_eval else 1
-
     if args.dataset == 'uk_house_prices':
         data, labels = prepare_house_price_data(args)
-    else:
-        (train_data, test_data), (train_labels, test_labels) = prepare_sarcos_data(args)
+    elif args.dataset == 'sarcos':
+        (train_data_or, test_data), (train_labels_or, test_labels) = prepare_sarcos_data(args)
+    elif args.dataset == 'kin40k':
+        (train_data, test_data), (train_labels, test_labels) = prepare_kin40k_data(args)
 
 
-    for seed in range(seeds):
+    for seed in range(args.num_seeds):
         torch.manual_seed(seed)
         np.random.seed(seed)
 
@@ -392,6 +449,13 @@ if __name__ == '__main__':
             train_labels = labels[:args.num_train_samples]
             test_data = data[args.num_train_samples:]
             test_labels = labels[args.num_train_samples:]
+        elif args.dataset == 'sarcos':
+            permutation = torch.randperm(len(train_data_or))
+            train_data = train_data_or[permutation]
+            train_labels = train_labels_or[permutation]
+
+            train_data = train_data[:args.num_train_samples]
+            train_labels = train_labels[:args.num_train_samples]
 
 
         label_mean = train_labels.mean()
@@ -407,8 +471,18 @@ if __name__ == '__main__':
 
         noise_var = 1.0
         log_noise_var = torch.nn.Parameter((torch.ones(1, device=('cuda' if args.use_gpu else 'cpu')) * noise_var).log(), requires_grad=True)
-        log_lengthscale = torch.nn.Parameter(torch.cdist(train_data[:args.num_lml_samples], train_data[:args.num_lml_samples]).median().log(), requires_grad=True)
-        log_var = torch.nn.Parameter((torch.ones(1, device=('cuda' if args.use_gpu else 'cpu')) * train_labels.var().log()), requires_grad=True)
+        if args.dataset == 'sarcos':
+            # we use ARD
+            log_lengthscale = torch.nn.Parameter(
+                torch.ones(1, device=('cuda' if args.use_gpu else 'cpu')) \
+                # * np.sqrt(train_data.shape[1]),
+                * torch.cdist(train_data[:args.num_train_samples], train_data[:args.num_train_samples]).median().log(),
+                requires_grad=True
+            )
+        else:
+            log_lengthscale = torch.nn.Parameter(torch.cdist(train_data[:args.num_train_samples], train_data[:args.num_train_samples]).median().log(), requires_grad=True)
+
+        log_var = torch.nn.Parameter(torch.ones(1, device=('cuda' if args.use_gpu else 'cpu')) * train_labels.var().log(), requires_grad=True)
 
         kernel_fun = lambda x, y: log_var.exp() * gaussian_kernel(x, y, lengthscale=log_lengthscale.exp())
 
@@ -421,8 +495,10 @@ if __name__ == '__main__':
             num_iterations=args.lml_iterations,
             lr=args.lml_lr
         )
+
+        # log_lengthscale = (log_lengthscale.exp() / 2.).log()
         
-        print('Lengthscale:', log_lengthscale.exp().item())
+        print('Lengthscale:', log_lengthscale.exp())
         print('Kernel var:', log_var.exp().item())
         print('Noise var:', log_noise_var.exp().item())
 
