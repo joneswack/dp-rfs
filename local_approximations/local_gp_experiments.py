@@ -48,9 +48,9 @@ def parse_args():
     parser.add_argument('--kin40k_dir', type=str, required=False,
                         default='../datasets/export/kin40k',
                         help='Directory of kin-40k dataset')
-    parser.add_argument('--dataset', choices=['uk_house_prices', 'sarcos', 'kin40k', 'uci'], required=False, default='sarcos',
+    parser.add_argument('--dataset', choices=['uk_house_prices', 'sarcos', 'kin40k', 'uci'], required=False, default='uci',
                         help='Which dataset to evaluate')
-    parser.add_argument('--uci_path', type=str, required=False, default='config/datasets/yacht.json',
+    parser.add_argument('--uci_path', type=str, required=False, default='config/datasets/kin8nm.json',
                         help='Path to UCI dataset json file')
     parser.add_argument('--csv_dir', type=str, required=False,
                         default='csv', help='Directory to save CSV files to')
@@ -330,7 +330,7 @@ def run_gp_eval(
     print(train_data.shape)
 
     # ground truth GP
-    kernel_fun = lambda x, y, star: log_var.exp().item() * gaussian_kernel(x, y, lengthscale=log_lengthscale.exp()) if not star else log_var.exp()
+    kernel_fun = lambda x, y: log_var.exp().item() * gaussian_kernel(x, y, lengthscale=log_lengthscale.exp())
     f_test_mean_ref, f_test_stds_ref = predictive_dist_exact(
         train_data, test_data, train_labels, log_noise_var.exp().item() * torch.ones_like(train_labels), kernel_fun
     )
