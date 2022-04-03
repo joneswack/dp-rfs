@@ -48,15 +48,17 @@ def parse_args():
     parser.add_argument('--kin40k_dir', type=str, required=False,
                         default='../datasets/export/kin40k',
                         help='Directory of kin-40k dataset')
-    parser.add_argument('--dataset', choices=['uk_house_prices', 'sarcos', 'kin40k'], required=False, default='kin40k',
+    parser.add_argument('--dataset', choices=['uk_house_prices', 'sarcos', 'kin40k', 'uci'], required=False, default='sarcos',
                         help='Which dataset to evaluate')
+    parser.add_argument('--uci_path', type=str, required=False, default='config/datasets/yacht.json',
+                        help='Path to UCI dataset json file')
     parser.add_argument('--csv_dir', type=str, required=False,
                         default='csv', help='Directory to save CSV files to')
     parser.add_argument('--figure_dir', type=str, required=False,
                         default='figures', help='Directory to save CSV files to')
     parser.add_argument('--num_seeds', type=int, required=False, default=10,
                         help='Number of seeds (runs)')
-    parser.add_argument('--num_train_samples', type=int, required=False, default=10000,
+    parser.add_argument('--num_train_samples', type=int, required=False, default=10000, # 10000
                         help='Number of data samples for training')
     parser.add_argument('--num_grid_samples', type=int, required=False, default=100,
                         help='Number of elements for each grid dimension')
@@ -72,10 +74,10 @@ def parse_args():
                         help='Number of random features')
     parser.add_argument('--num_clusters', type=int, required=False, default=10000,
                         help='Number of random clusters')
-    parser.add_argument('--cluster_method', choices=['random', 'farthest'], required=False, default='random',
+    parser.add_argument('--cluster_method', choices=['random', 'farthest'], required=False, default='farthest',
                         help='Clustering method')
     parser.add_argument('--cluster_train', dest='cluster_train', action='store_true')
-    parser.set_defaults(cluster_train=False)
+    parser.set_defaults(cluster_train=True)
     parser.add_argument('--use_gpu', dest='use_gpu', action='store_true')
     parser.set_defaults(use_gpu=False)
 
@@ -118,6 +120,24 @@ def prepare_house_price_data(args):
     labels = torch.from_numpy(result['price'].values).log().unsqueeze(1).float()
 
     return data, labels
+
+def prepare_uci_data(args):
+    data = util.data.load_dataset(args.uci_path, standardize=False, maxmin=False, normalize=False, split_size=0.9)
+    data_name, train_data, test_data, train_labels, test_labels = data
+
+    train_mean = train_data.mean(dim=0)
+    train_std = train_data.std(dim=0)
+    train_std[train_std==0] = 1.
+
+    train_data = (train_data - train_mean) / train_std
+    test_data = (test_data - train_mean) / train_std
+
+
+    # pad to power of 2
+    train_data = util.data.pad_data_pow_2(train_data, offset=0)
+    test_data = util.data.pad_data_pow_2(test_data, offset=0)
+
+    return torch.vstack([train_data, test_data]), torch.vstack([train_labels, test_labels])
 
 def prepare_sarcos_data(args):
 
@@ -240,7 +260,7 @@ def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, va
     feature_encoder = GaussianApproximator(
         train_data.shape[1], D,
         approx_degree=config['degree'],
-        lengthscale=lengthscale, var=var,
+        lengthscale=1.0, var=var,
         trainable_kernel=False,
         method=config['method'],
         projection_type=config['proj'],
@@ -248,6 +268,8 @@ def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, va
         complex_weights=config['complex_weights'],
         complex_real=config['complex_real']
     )
+
+    feature_encoder.log_lengthscale.data = lengthscale.log()
 
     if args.use_gpu:
         feature_encoder.cuda()
@@ -305,23 +327,16 @@ def run_gp_eval(
         log_lengthscale, log_var, log_noise_var, args, csv_handler, seed
     ):
 
-    # ground truth GP
-    while True:
-        # try:
-        kernel_fun = lambda x, y: log_var.exp().item() * gaussian_kernel(x, y, lengthscale=log_lengthscale.exp())
-        f_test_mean_ref, f_test_stds_ref = predictive_dist_exact(
-            train_data, test_data, train_labels, log_noise_var.exp().item() * torch.ones_like(train_labels), kernel_fun
-        )
-        break
-        # except RuntimeError:
-        #     log_noise_var.data = (log_noise_var.exp()*1.1).log()
-        #     print('Inversion error. New noise var:', log_noise_var.exp().item())
-        #     continue
+    print(train_data.shape)
 
-    lengthscale_multiplier_min = -3 if args.dataset == 'uk_house_prices' else 0
+    # ground truth GP
+    kernel_fun = lambda x, y, star: log_var.exp().item() * gaussian_kernel(x, y, lengthscale=log_lengthscale.exp()) if not star else log_var.exp()
+    f_test_mean_ref, f_test_stds_ref = predictive_dist_exact(
+        train_data, test_data, train_labels, log_noise_var.exp().item() * torch.ones_like(train_labels), kernel_fun
+    )
 
     if args.cluster_train:
-        lengthscale_multipliers = [2**i for i in range(lengthscale_multiplier_min, 5, 1)]
+        lengthscale_multipliers = [2**i for i in range(-3, 5, 1)]
     else:
         lengthscale_multipliers = [-1]
 
@@ -339,7 +354,7 @@ def run_gp_eval(
                 test_data,
                 num_clusters=args.num_clusters,
                 method=args.cluster_method,
-                global_max_dist=lengthscale_multiplier*log_lengthscale.exp().item()
+                global_max_dist= lengthscale_multiplier*log_lengthscale.exp().item()
             )
 
         # assign clusters
@@ -356,6 +371,8 @@ def run_gp_eval(
             Ds = [32, 64, 128, 256, 256, 512, 1024]
         elif args.dataset == 'kin40k':
             Ds = [32, 64, 128, 256, 256, 512, 1024]
+        else:
+            Ds = [32, 64, 128, 256, 256, 512, 1024]
 
         dummy_assignments = torch.zeros_like(cluster_assignments)
         dummy_centers = train_data.mean(dim=0).unsqueeze(0)
@@ -369,7 +386,7 @@ def run_gp_eval(
                 f_test_mean, f_test_stds, feature_dist, test_feature_time_ms = run_gp(
                     args, config, D,
                     train_data, test_data, train_labels,
-                    log_lengthscale.exp().item(),
+                    log_lengthscale.exp(),
                     log_var.exp().item(),
                     log_noise_var.exp().item(),
                     dummy_assignments if dummy_config else cluster_assignments,
@@ -433,22 +450,26 @@ if __name__ == '__main__':
         (train_data_or, test_data), (train_labels_or, test_labels) = prepare_sarcos_data(args)
     elif args.dataset == 'kin40k':
         (train_data, test_data), (train_labels, test_labels) = prepare_kin40k_data(args)
+    elif args.dataset == 'uci':
+        data, labels = prepare_uci_data(args)
 
 
     for seed in range(args.num_seeds):
         torch.manual_seed(seed)
         np.random.seed(seed)
 
-        if args.dataset == 'uk_house_prices':
+        if args.dataset == 'uk_house_prices' or args.dataset == 'uci':
             # shuffle data
             permutation = torch.randperm(len(data))
             data = data[permutation]
             labels = labels[permutation]
 
-            train_data = data[:args.num_train_samples]
-            train_labels = labels[:args.num_train_samples]
-            test_data = data[args.num_train_samples:]
-            test_labels = labels[args.num_train_samples:]
+            cutoff = min(int(0.9 * len(data)), args.num_train_samples)
+            
+            train_data = data[:cutoff]
+            train_labels = labels[:cutoff]
+            test_data = data[cutoff:2*cutoff]
+            test_labels = labels[cutoff:2*cutoff]
         elif args.dataset == 'sarcos':
             permutation = torch.randperm(len(train_data_or))
             train_data = train_data_or[permutation]
@@ -471,17 +492,7 @@ if __name__ == '__main__':
 
         noise_var = 1.0
         log_noise_var = torch.nn.Parameter((torch.ones(1, device=('cuda' if args.use_gpu else 'cpu')) * noise_var).log(), requires_grad=True)
-        if args.dataset == 'sarcos':
-            # we use ARD
-            log_lengthscale = torch.nn.Parameter(
-                torch.ones(1, device=('cuda' if args.use_gpu else 'cpu')) \
-                # * np.sqrt(train_data.shape[1]),
-                * torch.cdist(train_data[:args.num_train_samples], train_data[:args.num_train_samples]).median().log(),
-                requires_grad=True
-            )
-        else:
-            log_lengthscale = torch.nn.Parameter(torch.cdist(train_data[:args.num_train_samples], train_data[:args.num_train_samples]).median().log(), requires_grad=True)
-
+        log_lengthscale = torch.nn.Parameter(torch.cdist(train_data[:args.num_train_samples], train_data[:args.num_train_samples]).median().log(), requires_grad=True)
         log_var = torch.nn.Parameter(torch.ones(1, device=('cuda' if args.use_gpu else 'cpu')) * train_labels.var().log(), requires_grad=True)
 
         kernel_fun = lambda x, y: log_var.exp() * gaussian_kernel(x, y, lengthscale=log_lengthscale.exp())
@@ -496,9 +507,9 @@ if __name__ == '__main__':
             lr=args.lml_lr
         )
 
-        # log_lengthscale = (log_lengthscale.exp() / 2.).log()
+        # log_lengthscale = (log_lengthscale.exp() / 1.).log()
         
-        print('Lengthscale:', log_lengthscale.exp())
+        print('Lengthscale:', log_lengthscale.exp().item())
         print('Kernel var:', log_var.exp().item())
         print('Noise var:', log_noise_var.exp().item())
 
