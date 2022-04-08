@@ -141,9 +141,9 @@ class PolynomialSketch(torch.nn.Module):
         """
         super(PolynomialSketch, self).__init__()
         self.d_in = d_in
-        # if complex_real:
-        #     d_features = d_features // 2
-        self.d_features = d_features
+        if complex_real:
+            d_features = d_features // 2
+        # self.d_features = d_features
         self.degree = degree
         self.device = device
         self.projection_type = projection_type

@@ -462,11 +462,12 @@ if __name__ == '__main__':
 
         print('Comparing approximations...')
         
-        dimensions = [pow_2_shape * i for i in range(
-            rf_parameters['projection_range']['min'],
-            rf_parameters['projection_range']['max']+1,
-            rf_parameters['projection_range']['step']
-        )]
+        # dimensions = [pow_2_shape * i for i in range(
+        #     rf_parameters['projection_range']['min'],
+        #     rf_parameters['projection_range']['max']+1,
+        #     rf_parameters['projection_range']['step']
+        # )]
+        dimensions = [pow_2_shape * i for i in [0.125, 0.25, 0.5] + list(range(1,10))]
 
         for seed in range(args.num_seeds):
             torch.manual_seed(seed)
