@@ -50,7 +50,7 @@ class Spherical(torch.nn.Module):
     """
 
     def __init__(self, d_in, d_features, lengthscale='auto', var=1.0, ard=False, discrete_pdf=False, num_pdf_components=10,
-                    epsilon=1e-15, trainable_kernel=False, complex_weights=False, projection_type='gaussian', dtype=torch.FloatTensor):
+                    epsilon=1e-15, trainable_kernel=False, complex_weights=False, projection_type='gaussian', device='cpu'):
         """
         d_in: Data input dimension
         d_features: Projection dimension
@@ -72,26 +72,26 @@ class Spherical(torch.nn.Module):
             self.d_features = self.d_features // 2
         self.num_pdf_components = num_pdf_components
         self.epsilon = epsilon
-        self.dtype = dtype
+        self.device = device
         self.discrete_pdf = discrete_pdf
         self.projection_type = projection_type
         self.complex_weights = complex_weights
         
         # mixture weights are only for the Gaussian mixture and can be negative as well
         self.mixture_weights = torch.nn.Parameter(
-            np.sqrt(1./num_pdf_components) * (torch.rand(num_pdf_components).type(dtype)),
+            np.sqrt(1./num_pdf_components) * (torch.rand(num_pdf_components, device=device)),
             requires_grad=True
         )
 
         # gaussian scales in case of gaussian mixture / discrete scales in case of discrete pdf
         self.log_mixture_scales = torch.nn.Parameter(
-            softplus_inverse(np.sqrt(1./num_pdf_components) * torch.rand(num_pdf_components).type(dtype)),
+            softplus_inverse(np.sqrt(1./num_pdf_components) * torch.rand(num_pdf_components, device=device)),
             requires_grad=True
         )
 
         # used for discrete pdf
         self.log_support = torch.nn.Parameter(
-            softplus_inverse(torch.rand(num_pdf_components)*10).type(dtype),
+            softplus_inverse(torch.rand(num_pdf_components, device=device)*10),
             requires_grad=True
         )
 
@@ -103,12 +103,12 @@ class Spherical(torch.nn.Module):
         # (we take care of it in the forward pass)
         num_lengthscales = d_in if ard else 1
         self.log_lengthscale = torch.nn.Parameter(
-            torch.ones(num_lengthscales).type(dtype) * np.log(lengthscale),
+            torch.ones(num_lengthscales, device=device) * np.log(lengthscale),
             requires_grad=trainable_kernel
         )
 
         self.log_var = torch.nn.Parameter(
-            torch.ones(1).type(dtype) * np.log(var),
+            torch.ones(1, device=device) * np.log(var),
             requires_grad=trainable_kernel
         )
         
@@ -118,8 +118,9 @@ class Spherical(torch.nn.Module):
         torch.save(self.state_dict(), path, _use_new_zipfile_serialization=False)
 
     def load_model(self, path):
-        model = torch.load(path, map_location='cpu')
+        model = torch.load(path, map_location=self.device)
         self.load_state_dict(model)
+        # model.to(self.device)
 
     def resample(self, num_points_w=1000):
         with torch.no_grad():
@@ -132,24 +133,24 @@ class Spherical(torch.nn.Module):
                 w_vals, pdf = self.compute_norm_pdf(num_points_w=num_points_w)
                 # since we only have samples from the pdf, they need to be normalized for the ecdf
                 pdf = pdf / pdf.sum()
-                cdf = np.cumsum(pdf.numpy())
+                cdf = np.cumsum(pdf.cpu().numpy())
                 # to prevent out of range sampling
                 cdf[-1] = 1.
                 # we do inverse cdf sampling
-                f = interpolate.interp1d(cdf, w_vals)
+                f = interpolate.interp1d(cdf, w_vals.cpu().numpy())
                 pdf_samples = f(np.random.rand(self.d_features))
 
         if self.projection_type == 'srht':
             self.feature_encoder = SRHT(self.d_in, self.d_features,
-                                        complex_weights=False, shuffle=False, k=3)
+                                        complex_weights=False, shuffle=False, k=3, device=self.device)
         else:
-            self.feature_encoder = GaussianTransform(self.d_in, self.d_features, complex_weights=False)
+            self.feature_encoder = GaussianTransform(self.d_in, self.d_features, complex_weights=False, device=self.device)
 
         self.feature_encoder.resample()
         if self.projection_type != 'srht':
             self.feature_encoder.weights.data = self.feature_encoder.weights.data \
                 / self.feature_encoder.weights.data.norm(dim=0)
-        self.scales = torch.from_numpy(pdf_samples).float()
+        self.scales = torch.from_numpy(pdf_samples).float().to(self.device)
 
     def move_submodules_to_cuda(self):
         self.feature_encoder.cuda()
@@ -208,7 +209,7 @@ class Spherical(torch.nn.Module):
                 * (softplus(self.log_mixture_scales) / torch.abs(self.mixture_weights))**(2/(self.d_in-1))
 
             cutoff = softplus(self.log_mixture_scales) \
-                * torch.from_numpy(np.sqrt(-2. * (self.d_in-1) * scipy.special.lambertw(x.numpy(), k=-1).real)).float()
+                * torch.from_numpy(np.sqrt(-2. * (self.d_in-1) * scipy.special.lambertw(x.cpu().numpy(), k=-1).real)).float().to(self.device)
 
             return cutoff
 
@@ -220,7 +221,7 @@ class Spherical(torch.nn.Module):
         cutoff = torch.max(self.find_cutoff())
 
         # cannot backprop through -inf from log(0)
-        w_vals = torch.linspace(1e-9, cutoff, steps=num_points_w).type(self.dtype)
+        w_vals = torch.linspace(1e-9, cutoff, steps=num_points_w).to(self.device) # .type(self.dtype)
 
         # argument of the gaussians (n_gaussians x w_samples)
         gauss_arg = 0.5 * (1. / softplus(self.log_mixture_scales).unsqueeze(1)) * w_vals.unsqueeze(0)

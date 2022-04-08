@@ -193,7 +193,7 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
                             lengthscale=1.0, var=1.0, ard=False,
                             discrete_pdf=False, num_pdf_components=10,
                             complex_weights=config['complex_weights'],
-                            projection_type=config['proj'])
+                            projection_type=config['proj'], device=('cuda' if args.use_gpu else 'cpu'))
         feature_encoder.load_model(rf_params['srf_model_path_prefix'] + '_d{}.torch'.format(
             int(train_data_padded.shape[1])
         ))
