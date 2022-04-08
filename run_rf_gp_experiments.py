@@ -249,15 +249,19 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
 
     # before computing the random features, we empty the cuda cache
     del data_dict
-    torch.cuda.empty_cache()
 
-    torch.cuda.synchronize()
+    if args.use_gpu:
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+
     start = time.time()
 
     train_features = feature_encoder.forward(train_data_padded)
     test_features = feature_encoder.forward(test_data_padded)
 
-    torch.cuda.synchronize()
+    if args.use_gpu:
+        torch.cuda.synchronize()
+
     feature_time = time.time() - start
 
     ### kernel approximation on a subset of the test data
@@ -287,7 +291,8 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
     test_var_mse = (f_test_stds_ref**2 - f_test_stds_est**2).pow(2).mean()
 
     ### gp prediction
-    torch.cuda.synchronize()
+    if args.use_gpu:
+        torch.cuda.synchronize()
     start = time.time()
 
     if regression:
@@ -296,7 +301,8 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
             train_labels, train_label_vars
         )
         
-        torch.cuda.synchronize()
+        if args.use_gpu:
+            torch.cuda.synchronize()
         prediction_time = time.time() - start
 
         f_test_mean += train_label_mean
@@ -307,7 +313,8 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
             num_samples=args.num_mc_samples
         )
 
-        torch.cuda.synchronize()
+        if args.use_gpu:
+            torch.cuda.synchronize()
         prediction_time = time.time() - start
 
         test_predictions += train_label_mean

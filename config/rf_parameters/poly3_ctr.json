@@ -2,7 +2,7 @@
     "kernel": "polynomial",
     "save_name": "poly3_approx_ctr",
     "degree": 3,
-    "a": 2,
+    "a": 4,
     "min_sampling_degree": 2,
     "max_sampling_degree": 10,
     "projection_range": {
@@ -25,13 +25,8 @@
     "srf_model_path_prefix": "saved_models/poly_a4.0_p3",
     "baseline_config": {"method": "srf", "proj": "gaussian", "complex_weights": false},
     "configurations": [
-        {"method": "poly_sketch", "proj": "rademacher", "hierarchical": false, "complex_weights": false},
-        {"method": "poly_sketch", "proj": "rademacher", "hierarchical": false, "complex_weights": true},
-        {"method": "poly_sketch", "proj": "rademacher", "hierarchical": false, "complex_weights": false, "complex_real": true},
-        {"method": "poly_sketch", "proj": "srht", "hierarchical": false, "complex_weights": false, "full_cov": false},
+        {"method": "srf", "proj": "gaussian", "complex_weights": false},
         {"method": "poly_sketch", "proj": "srht", "hierarchical": false, "complex_weights": false, "full_cov": true},
-        {"method": "poly_sketch", "proj": "srht", "hierarchical": false, "complex_weights": true, "full_cov": false},
-        {"method": "poly_sketch", "proj": "srht", "hierarchical": false, "complex_weights": true, "full_cov": true},
         {"method": "poly_sketch", "proj": "srht", "hierarchical": false, "complex_weights": false, "complex_real": true, "full_cov": true},
         {"method": "poly_sketch", "proj": "countsketch_scatter", "hierarchical": false, "complex_weights": false}
     ]
