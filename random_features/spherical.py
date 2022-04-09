@@ -318,9 +318,9 @@ if __name__ == '__main__':
     iterations = 200
     num_points_w = 500
     num_points_z = 500
-    d_in = 8
+    d_in = 1024
     d_out = 10000
-    a = 4
+    a = 2
     p = 20
     num_components = 10
     complex_weights = True

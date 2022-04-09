@@ -2,7 +2,7 @@
     "kernel": "polynomial",
     "save_name": "poly10_approx_ctr",
     "degree": 10,
-    "a": 4,
+    "a": 2,
     "min_sampling_degree": 2,
     "max_sampling_degree": 10,
     "projection_range": {
@@ -22,7 +22,7 @@
             "base": 10
         }
     },
-    "srf_model_path_prefix": "saved_models/poly_a4.0_p10",
+    "srf_model_path_prefix": "saved_models/poly_a2.0_p10",
     "baseline_config": {"method": "poly_sketch", "proj": "srht", "hierarchical": false, "complex_weights": false, "complex_real": true, "full_cov": true},
     "configurations": [
         {"method": "srf", "proj": "gaussian", "complex_weights": false},
