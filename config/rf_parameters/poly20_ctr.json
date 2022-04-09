@@ -23,7 +23,7 @@
         }
     },
     "srf_model_path_prefix": "saved_models/poly_a4.0_p20",
-    "baseline_config": {"method": "srf", "proj": "gaussian", "complex_weights": false},
+    "baseline_config": {"method": "poly_sketch", "proj": "srht", "hierarchical": false, "complex_weights": false, "complex_real": true, "full_cov": true},
     "configurations": [
         {"method": "srf", "proj": "gaussian", "complex_weights": false},
         {"method": "poly_sketch", "proj": "srht", "hierarchical": false, "complex_weights": false, "full_cov": true},
