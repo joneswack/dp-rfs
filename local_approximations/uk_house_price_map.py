@@ -6,9 +6,6 @@ import pandas as pd
 import os
 # os.environ["PROJ_LIB"] = os.path.join(os.environ["CONDA_PREFIX"], "share", "proj")
 from mpl_toolkits.basemap import Basemap
-
-from tqdm import tqdm
-from timeit import default_timer as timer
 import argparse
 
 import sys 
@@ -16,7 +13,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "../"))
 from util.data import DF_Handler
 from util.kernels import gaussian_kernel
 from util.helper_functions import optimize_marginal_likelihood, kl_factorized_gaussian, regression_scores
-from util.measures import Exponential_Measure
+from local_approximations.local_prediction_utils import cluster_points, compute_local_predictions
 from models.het_gp import HeteroskedasticGP, predictive_dist_exact
 from random_features.gaussian_approximator import GaussianApproximator
 
@@ -81,82 +78,12 @@ def parse_args():
                         help='Clustering method')
     parser.add_argument('--cluster_train', dest='cluster_train', action='store_true')
     parser.set_defaults(cluster_train=False)
-    parser.add_argument('--run_gp_eval', dest='run_gp_eval', action='store_true')
-    parser.set_defaults(run_gp_eval=False)
-    parser.add_argument('--plot_map', dest='plot_map', action='store_true')
-    parser.set_defaults(plot_map=True)
     parser.add_argument('--use_gpu', dest='use_gpu', action='store_true')
     parser.set_defaults(use_gpu=False)
 
     args = parser.parse_args()
 
     return args
-
-def cluster_points(data, num_clusters=10, method='random', global_max_dist=1.):
-
-    shuffled_data = data[torch.randperm(len(data))]
-
-    # determine cluster centers
-    if method=='farthest':
-        cluster_centers = [shuffled_data.mean(dim=0)]
-
-        for _ in range(num_clusters-1):
-            distances = torch.cdist(shuffled_data, torch.stack(cluster_centers, dim=0), p=2)
-
-            # distances to the closest cluster centers
-            min_dists = distances.min(dim=1)[0]
-
-            if min_dists.max() <= global_max_dist:
-                break
-
-            farthest_point = min_dists.argmax()
-            cluster_centers.append(shuffled_data[farthest_point])
-
-        print('Number of clusters found: {}'.format(len(cluster_centers)))
-        cluster_centers = torch.stack(cluster_centers, dim=0)
-    elif method == 'random':
-        cluster_centers = shuffled_data[:num_clusters]
-
-    return cluster_centers
-
-
-def compute_local_predictions(
-        train_data, test_data, train_labels,
-        cluster_assignments, cluster_centers,
-        feature_encoder, noise_var):
-
-    predictive_means = torch.zeros(
-        len(test_data), 1,
-        dtype=train_data.dtype, device=train_data.device
-    )
-    predictive_stds = torch.zeros_like(predictive_means)
-
-    test_feature_time_ms = 0
-        
-    for cluster_id, cluster_center in tqdm(enumerate(cluster_centers)):
-        if (cluster_assignments==cluster_id).sum()==0:
-            # skip empty clusters
-            continue
-
-        train_features = feature_encoder.forward(train_data - cluster_center)
-
-        torch.cuda.synchronize()
-        start = timer()
-        test_features = feature_encoder.forward(test_data[cluster_assignments==cluster_id] - cluster_center)
-        torch.cuda.synchronize()
-        test_feature_time_ms += (timer() - start) * 1000
-
-        het_gp = HeteroskedasticGP(None)
-
-        f_test_mean, f_test_stds = het_gp.predictive_dist(
-            train_features, test_features,
-            train_labels, noise_var * torch.ones_like(train_labels)
-        )
-
-        predictive_means[cluster_assignments==cluster_id] = f_test_mean
-        predictive_stds[cluster_assignments==cluster_id] = f_test_stds
-
-    return predictive_means, predictive_stds, test_feature_time_ms
 
 
 def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, var, noise_var, cluster_assignments, cluster_centers):
@@ -207,12 +134,7 @@ def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, va
             feature_encoder.cuda()
 
         train_features = feature_encoder.forward(train_data)
-
-        torch.cuda.synchronize()
-        start = timer()
         test_features = feature_encoder.forward(test_data)
-        torch.cuda.synchronize()
-        test_feature_time_ms = (timer() - start) * 1000
 
         het_gp = HeteroskedasticGP(None)
 
@@ -221,109 +143,7 @@ def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, va
             train_labels, noise_var * torch.ones_like(train_labels)
         )
 
-    return predictive_means, predictive_stds, feature_dist, test_feature_time_ms
-
-
-def run_gp_eval(
-        train_data, test_data, train_labels, test_labels, label_mean,
-        log_lengthscale, log_var, log_noise_var, args, csv_handler, seed
-    ):
-
-    # ground truth GP
-    while True:
-        try:
-            kernel_fun = lambda x, y: log_var.exp().item() * gaussian_kernel(x, y, lengthscale=log_lengthscale.exp().item())
-            f_test_mean_ref, f_test_stds_ref = predictive_dist_exact(
-                train_data, test_data, train_labels, log_noise_var.exp().item() * torch.ones_like(train_labels), kernel_fun
-            )
-            break
-        except RuntimeError:
-            log_noise_var.data = (log_noise_var.exp()*1.1).log()
-            print('Inversion error. New noise var:', log_noise_var.exp().item())
-            continue
-
-
-    for lengthscale_multiplier in [2**i for i in range(-3, 5, 1)]:
-        # determine clusters
-        if args.cluster_train:
-            cluster_centers = cluster_points(
-                train_data,
-                num_clusters=args.num_clusters,
-                method=args.cluster_method,
-                global_max_dist=lengthscale_multiplier*log_lengthscale.exp().item()
-            )
-        else:
-            cluster_centers = cluster_points(
-                test_data,
-                num_clusters=args.num_clusters,
-                method=args.cluster_method,
-                global_max_dist=lengthscale_multiplier*log_lengthscale.exp().item()
-            )
-
-        # assign clusters
-        torch.cuda.synchronize()
-        start = timer()
-        distances = torch.cdist(test_data, cluster_centers, p=2)
-        cluster_assignments = distances.argmin(dim=1)
-        torch.cuda.synchronize()
-        cluster_assignment_time_ms = (timer() - start) * 1000
-
-        for D in [8, 16, 32, 64, 128, 256, 512, 1024]:
-        # D = args.num_rfs
-
-            for config in configs:
-                f_test_mean, f_test_stds, feature_dist, test_feature_time_ms = run_gp(
-                    args, config, D,
-                    train_data, test_data, train_labels,
-                    log_lengthscale.exp().item(),
-                    log_var.exp().item(),
-                    log_noise_var.exp().item(),
-                    cluster_assignments,
-                    cluster_centers
-                )
-
-                test_kl = kl_factorized_gaussian(
-                    f_test_mean+label_mean,
-                    f_test_mean_ref+label_mean,
-                    (f_test_stds**2+log_noise_var.exp()).sqrt(),
-                    (f_test_stds_ref**2+log_noise_var.exp()).sqrt()
-                ).sum(dim=0).mean().item()
-                
-                test_mean_mse = (f_test_mean_ref - f_test_mean).pow(2).mean().item()
-                test_var_mse = (f_test_stds_ref**2 - f_test_stds**2).pow(2).mean().item()
-
-                test_rmse, test_mnll = regression_scores(
-                    f_test_mean+label_mean,
-                    f_test_stds**2 + log_noise_var.exp().item(),
-                    test_labels + label_mean
-                )
-
-                feature_dist = str(feature_dist)
-
-                log_dir = {
-                    'seed': seed,
-                    'N': args.num_train_samples,
-                    'D': D,
-                    'num_clusters': len(cluster_centers) if cluster_centers is not None else None,
-                    'lengthscale_mult': lengthscale_multiplier,
-                    'lengthscale': log_lengthscale.exp().item(),
-                    'kernel_var': log_var.exp().item(),
-                    'noise_var': log_noise_var.exp().item(),
-                    'method': config['method'],
-                    'proj': config['proj'],
-                    'ctr': config['complex_real'],
-                    'feature_dist': feature_dist,
-                    'rmse': test_rmse,
-                    'test_kl': test_kl,
-                    'test_mnll': test_mnll,
-                    'test_mean_mse': test_mean_mse,
-                    'test_var_mse': test_var_mse,
-                    'cluster_time_ms': cluster_assignment_time_ms,
-                    'test_feature_time_ms': test_feature_time_ms
-                }
-
-                csv_handler.append(log_dir)
-                csv_handler.save()
+    return predictive_means, predictive_stds, feature_dist
 
 def plot_gp_map(
         train_data, train_labels, test_labels, label_mean,
@@ -417,7 +237,7 @@ def plot_gp_map(
         dummy_config = ('single_cluster' in config and config['single_cluster'])
         
         # run gp
-        f_test_mean, f_test_stds, feature_dist, test_feature_time_ms = run_gp(
+        f_test_mean, f_test_stds, feature_dist = run_gp(
                 args, config, args.num_rfs,
                 train_data, grid_inputs, train_labels,
                 log_lengthscale.exp().item(),
@@ -433,15 +253,6 @@ def plot_gp_map(
             (f_test_stds**2+log_noise_var.exp()).sqrt(),
             (f_test_stds_ref**2+log_noise_var.exp()).sqrt()
         ).sum(dim=0).mean().item()
-        
-        test_mean_mse = (f_test_mean_ref - f_test_mean).pow(2).mean().item()
-        test_var_mse = (f_test_stds_ref**2 - f_test_stds**2).pow(2).mean().item()
-
-        # test_rmse, test_mnll = regression_scores(
-        #     f_test_mean+label_mean,
-        #     f_test_stds**2 + log_noise_var.exp().item(),
-        #     test_labels + label_mean
-        # )
 
         if config['method'] == 'maclaurin':
             axes[j+1].set_title('{}\n$(D_i)_{{i=1}}^p={}, p={}$\nKL Divergence: {}'.format(
@@ -546,64 +357,52 @@ if __name__ == '__main__':
 
     csv_handler = DF_Handler('uk_house_prices', args.csv_filename, csv_dir=args.csv_dir)
 
-    seeds = args.num_seeds if args.run_gp_eval else 1
+    # shuffle data
+    torch.manual_seed(0)
+    np.random.seed(seed=0)
+    permutation = torch.randperm(len(data))
+    data = data[permutation]
+    labels = labels[permutation]
 
-    for seed in range(seeds):
-        torch.manual_seed(seed)
-        np.random.seed(seed)
+    train_data = data[:args.num_train_samples]
+    train_labels = labels[:args.num_train_samples]
+    label_mean = train_labels.mean()
+    train_labels -= label_mean
+    test_data = data[args.num_train_samples:]
+    test_labels = labels[args.num_train_samples:]
+    test_labels -= label_mean
 
-        # shuffle data
-        permutation = torch.randperm(len(data))
-        data = data[permutation]
-        labels = labels[permutation]
+    if args.use_gpu:
+        train_data = train_data.cuda()
+        train_labels = train_labels.cuda()
+        test_data = test_data.cuda()
+        test_labels = test_labels.cuda()
+        label_mean = label_mean.cuda()
 
-        train_data = data[:args.num_train_samples]
-        train_labels = labels[:args.num_train_samples]
-        label_mean = train_labels.mean()
-        train_labels -= label_mean
-        test_data = data[args.num_train_samples:]
-        test_labels = labels[args.num_train_samples:]
-        test_labels -= label_mean
+    noise_var = 1.0
+    log_noise_var = torch.nn.Parameter((torch.ones(1, device=('cuda' if args.use_gpu else 'cpu')) * noise_var).log(), requires_grad=True)
+    log_lengthscale = torch.nn.Parameter(torch.cdist(train_data, train_data).median().log(), requires_grad=True)
+    log_var = torch.nn.Parameter((torch.ones(1, device=('cuda' if args.use_gpu else 'cpu')) * train_labels.var()), requires_grad=True)
 
-        if args.use_gpu:
-            train_data = train_data.cuda()
-            train_labels = train_labels.cuda()
-            test_data = test_data.cuda()
-            test_labels = test_labels.cuda()
-            label_mean = label_mean.cuda()
+    kernel_fun = lambda x, y: log_var.exp() * gaussian_kernel(x, y, lengthscale=log_lengthscale.exp())
 
-        noise_var = 1.0
-        log_noise_var = torch.nn.Parameter((torch.ones(1, device=('cuda' if args.use_gpu else 'cpu')) * noise_var).log(), requires_grad=True)
-        log_lengthscale = torch.nn.Parameter(torch.cdist(train_data, train_data).median().log(), requires_grad=True)
-        log_var = torch.nn.Parameter((torch.ones(1, device=('cuda' if args.use_gpu else 'cpu')) * train_labels.var()), requires_grad=True)
+    optimize_marginal_likelihood(
+        train_data[:args.num_lml_samples],
+        train_labels[:args.num_lml_samples],
+        kernel_fun, log_lengthscale,
+        log_var,
+        log_noise_var,
+        num_iterations=args.lml_iterations,
+        lr=args.lml_lr
+    )
+    
+    print('Lengthscale:', log_lengthscale.exp().item())
+    print('Kernel var:', log_var.exp().item())
+    print('Noise var:', log_noise_var.exp().item())
 
-        kernel_fun = lambda x, y: log_var.exp() * gaussian_kernel(x, y, lengthscale=log_lengthscale.exp())
-
-        optimize_marginal_likelihood(
-            train_data[:args.num_lml_samples],
-            train_labels[:args.num_lml_samples],
-            kernel_fun, log_lengthscale,
-            log_var,
-            log_noise_var,
-            num_iterations=args.lml_iterations,
-            lr=args.lml_lr
-        )
-        
-        print('Lengthscale:', log_lengthscale.exp().item())
-        print('Kernel var:', log_var.exp().item())
-        print('Noise var:', log_noise_var.exp().item())
-
-        ### Run comparisons across feature dimensions and seeds ###
-        if args.run_gp_eval:
-            run_gp_eval(
-                train_data, test_data, train_labels, test_labels, label_mean,
-                log_lengthscale, log_var, log_noise_var, args, csv_handler, seed
-            )
-
-        ### plot map ###
-        if args.plot_map:
-            plot_gp_map(
-                train_data, train_labels, test_labels, label_mean,
-                log_lengthscale, log_var, log_noise_var, args
-            )
+    ### plot map ###
+    plot_gp_map(
+        train_data, train_labels, test_labels, label_mean,
+        log_lengthscale, log_var, log_noise_var, args
+    )
 

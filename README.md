@@ -129,6 +129,10 @@ Here, we chose the optimized Maclaurin method (`method='maclaurin'`).
 `initialize_sampling_distribution` finds the optimal random feature distribtion between degrees `min_sampling_degree=2` and `approx_degree=10`. `method='rff'` (random Fourier features) and `method='poly_sketch'` do not require this step.
 `method='maclaurin_p'` gives the Maclaurin approximation according to [(Kar and Karnick, 2012)](http://proceedings.mlr.press/v22/kar12/kar12.pdf), which is less optimal than the optimized Maclaurin method but requires no preprocessing.
 
+### Localized random features for Gaussian kernels with short length scales
+
+Approximating the Gaussian kernel on high-frequency data, tipycally modelled using short length scales, is very challenging for random feature methods. The `local_approximations` folder contains implementations where the above Maclaurin approximations are centered around individual test points to improve results considerably in such scenarios. These implementations follow the work of *wacker2022c* and serve to reproduce the experiments in the original paper.
+
 ### Approximating other Dot Product Kernels using the Maclaurin method
 
 The `GaussianApproximator` module above is a thin wrapper of the Maclaurin module contained in `random_features.maclaurin`. When approximating a general dot product kernel, e.g., the exponential dot product kernel, we do not need this wrapper, but use the Maclaurin module directly. Follow the code inside `GaussianApproximator` to see how the `Maclaurin` module is used.

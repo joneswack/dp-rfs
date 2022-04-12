@@ -17,7 +17,7 @@ import util.data
 from util.data import DF_Handler
 from util.kernels import gaussian_kernel
 from util.helper_functions import optimize_marginal_likelihood, kl_factorized_gaussian, regression_scores
-from util.measures import Exponential_Measure
+from local_approximations.local_prediction_utils import cluster_points, compute_local_predictions
 from models.het_gp import HeteroskedasticGP, predictive_dist_exact
 from random_features.gaussian_approximator import GaussianApproximator
 
@@ -132,7 +132,6 @@ def prepare_uci_data(args):
     train_data = (train_data - train_mean) / train_std
     test_data = (test_data - train_mean) / train_std
 
-
     # pad to power of 2
     train_data = util.data.pad_data_pow_2(train_data, offset=0)
     test_data = util.data.pad_data_pow_2(test_data, offset=0)
@@ -185,75 +184,6 @@ def prepare_kin40k_data(args):
 
     return (train_data, test_data), (train_labels, test_labels)
 
-def cluster_points(data, num_clusters=10, method='random', global_max_dist=1.):
-
-    shuffled_data = data[torch.randperm(len(data))]
-
-    # determine cluster centers
-    if method=='farthest':
-        cluster_centers = [shuffled_data.mean(dim=0)]
-
-        for _ in range(num_clusters-1):
-            distances = torch.cdist(shuffled_data, torch.stack(cluster_centers, dim=0), p=2)
-
-            # distances to the closest cluster centers
-            min_dists = distances.min(dim=1)[0]
-
-            if min_dists.max() <= global_max_dist:
-                break
-
-            farthest_point = min_dists.argmax()
-            cluster_centers.append(shuffled_data[farthest_point])
-
-        print('Number of clusters found: {}'.format(len(cluster_centers)))
-        cluster_centers = torch.stack(cluster_centers, dim=0)
-    elif method == 'random':
-        cluster_centers = shuffled_data[:num_clusters]
-
-    return cluster_centers
-
-
-def compute_local_predictions(
-        train_data, test_data, train_labels,
-        cluster_assignments, cluster_centers,
-        feature_encoder, noise_var):
-
-    predictive_means = torch.zeros(
-        len(test_data), 1,
-        dtype=train_data.dtype, device=train_data.device
-    )
-    predictive_stds = torch.zeros_like(predictive_means)
-
-    test_feature_time_ms = 0
-        
-    for cluster_id, cluster_center in tqdm(enumerate(cluster_centers)):
-        if (cluster_assignments==cluster_id).sum()==0:
-            # skip empty clusters
-            continue
-
-        train_features = feature_encoder.forward(train_data - cluster_center)
-
-        torch.cuda.synchronize()
-        start = timer()
-        assigned_test_data = test_data[cluster_assignments==cluster_id]
-        if assigned_test_data.dim() == 1:
-            assigned_test_data = assigned_test_data.unsqueeze(dim=0)
-        test_features = feature_encoder.forward(assigned_test_data - cluster_center)
-        torch.cuda.synchronize()
-        test_feature_time_ms += (timer() - start) * 1000
-
-        het_gp = HeteroskedasticGP(None)
-
-        f_test_mean, f_test_stds = het_gp.predictive_dist(
-            train_features, test_features,
-            train_labels, noise_var * torch.ones_like(train_labels)
-        )
-
-        predictive_means[cluster_assignments==cluster_id] = f_test_mean
-        predictive_stds[cluster_assignments==cluster_id] = f_test_stds
-
-    return predictive_means, predictive_stds, test_feature_time_ms
-
 
 def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, var, noise_var, cluster_assignments, cluster_centers):
 
@@ -305,12 +235,7 @@ def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, va
             feature_encoder.cuda()
 
         train_features = feature_encoder.forward(train_data)
-
-        torch.cuda.synchronize()
-        start = timer()
         test_features = feature_encoder.forward(test_data)
-        torch.cuda.synchronize()
-        test_feature_time_ms = (timer() - start) * 1000
 
         het_gp = HeteroskedasticGP(None)
 
@@ -319,15 +244,13 @@ def run_gp(args, config, D, train_data, test_data, train_labels, lengthscale, va
             train_labels, noise_var * torch.ones_like(train_labels)
         )
 
-    return predictive_means, predictive_stds, feature_dist, test_feature_time_ms
+    return predictive_means, predictive_stds, feature_dist
 
 
 def run_gp_eval(
         train_data, test_data, train_labels, test_labels, label_mean,
         log_lengthscale, log_var, log_noise_var, args, csv_handler, seed
     ):
-
-    print(train_data.shape)
 
     # ground truth GP
     kernel_fun = lambda x, y: log_var.exp().item() * gaussian_kernel(x, y, lengthscale=log_lengthscale.exp())
@@ -358,12 +281,8 @@ def run_gp_eval(
             )
 
         # assign clusters
-        torch.cuda.synchronize()
-        start = timer()
         distances = torch.cdist(test_data, cluster_centers, p=2)
         cluster_assignments = distances.argmin(dim=1)
-        torch.cuda.synchronize()
-        cluster_assignment_time_ms = (timer() - start) * 1000
 
         if args.dataset == 'uk_house_prices':
             Ds = [8, 16, 32, 64, 128, 256, 512, 1024]
@@ -383,7 +302,7 @@ def run_gp_eval(
             for config in configs:
                 dummy_config = ('single_cluster' in config and config['single_cluster'])
 
-                f_test_mean, f_test_stds, feature_dist, test_feature_time_ms = run_gp(
+                f_test_mean, f_test_stds, feature_dist = run_gp(
                     args, config, D,
                     train_data, test_data, train_labels,
                     log_lengthscale.exp(),
@@ -430,9 +349,7 @@ def run_gp_eval(
                     'test_kl': test_kl,
                     'test_mnll': test_mnll,
                     'test_mean_mse': test_mean_mse,
-                    'test_var_mse': test_var_mse,
-                    'cluster_time_ms': cluster_assignment_time_ms,
-                    'test_feature_time_ms': test_feature_time_ms
+                    'test_var_mse': test_var_mse
                 }
 
                 csv_handler.append(log_dir)
