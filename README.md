@@ -137,7 +137,7 @@ Here, we chose the optimized Maclaurin method (`method='maclaurin'`).
 
 ### Localized random features for Gaussian kernels with short length scales
 
-Approximating the Gaussian kernel on high-frequency data, tipycally modelled using short length scales, is very challenging for random feature methods. The `local_approximations` folder contains implementations where the above Maclaurin approximations are centered around individual test points to improve results considerably in such scenarios. These implementations follow the work of *wacker2022c* and serve to reproduce the experiments in the original paper.
+Approximating the Gaussian kernel on high-frequency data, tipycally modelled using short length scales, is very challenging for random feature methods. The `local_approximations` folder contains implementations where the above Maclaurin approximations are centered around individual test points to improve results considerably in such scenarios. These implementations follow the work of [(Wacker, 2022c)](https://arxiv.org/abs/2204.05667) and serve to reproduce the experiments in the original paper.
 
 ### Approximating other Dot Product Kernels using the Maclaurin method
 
