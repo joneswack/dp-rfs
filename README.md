@@ -19,6 +19,12 @@ For more information and a description of the novelties of this work, consult th
   journal={arXiv preprint arXiv:2202.02031},
   year={2022}
 }
+@article{wacker2022c,
+  title={Local Random Feature Approximations of the Gaussian Kernel},
+  author={Wacker, Jonas and Filippone, Maurizio},
+  journal={arXiv preprint arXiv:2204.05667},
+  year={2022}
+}
 ```
 
 Please cite these works if you find them useful.
