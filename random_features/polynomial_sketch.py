@@ -13,7 +13,7 @@ class SketchNode:
     This is only used for hierarchical sketches.
     """
 
-    def __init__(self, left, right, projection, d_features, sup_leaf=False):
+    def __init__(self, left, right, projection, d_features, sup_leaf=False, ctr=False):
         """
         left: Left child node
         right: Right child node
@@ -26,6 +26,7 @@ class SketchNode:
         self.projection = projection
         self.d_features = d_features
         self.sup_leaf = sup_leaf
+        self.ctr = ctr
 
     def _is_leaf(self):
         return (self.left is None) and (self.right is None)
@@ -49,6 +50,7 @@ class SketchNode:
         output = None
 
         for child in [self.left, self.right]:
+
             if child._is_leaf():
                 if child.sup_leaf:
                     e1 = torch.zeros_like(data)
@@ -56,6 +58,12 @@ class SketchNode:
                     c1 = child.projection.forward(e1)
                 else:
                     c1 = child.projection.forward(data)
+
+                # if the child is a leaf, we do not combine its projection
+                # moreover, we immediately return this projection
+                return c1
+
+            # combine both children if they are not the leaf nodes
             else:
                 c1 = child.projection.forward(child.join_children(data))
 
@@ -72,20 +80,29 @@ class SketchNode:
                 else:
                     output = c1 * output / np.sqrt(self.d_features)
                     output[:, self.d_features:] = 0
+
+                    # if the output is complex, return CtR
+                    if self.ctr:
+                        output = torch.cat([output.real, output.imag], dim=-1)
+
                     return output
 
-def construct_sketch_tree(projection, degree, d_in, d_features, srht=False):
+def construct_sketch_tree(node_projection, leaf_projection, degree, d_in, d_features, srht=False, ctr=False):
     """
     Constructs a binary tree composed of SketchNodes (only used for hierarchical sketches).
 
-    projection: The base sketch of choice
+    node_projection (callable): The constructor of the base sketch of choice
+    leaf_projection (callable): The constructor of the leaf sketch of choice
     degree: The degree of the polynomial kernel
     d_in: Data input dimension
     d_features: Projection dimension
+    ctr: whether complex-to-real projections are used. in this case we need to project to D//2
     """
 
     q = int(2.**np.ceil(np.log2(degree))) # e.g. degree 5 -> 8
     q = max(q, 2) # even for degree 1, we construct a sketch tree
+
+    downscale = 2 if ctr else 1
 
     if srht:
         # in the case of srht, we need to project to the power of 2
@@ -94,11 +111,18 @@ def construct_sketch_tree(projection, degree, d_in, d_features, srht=False):
     else:
         proj_dim = d_features
 
-    # start with the leafs        
-    current_layer = [SketchNode(None, None, projection(d_in, proj_dim),
-                d_features, sup_leaf=False) for _ in range(degree)]
-    current_layer += [SketchNode(None, None, projection(d_in, proj_dim),
-                d_features, sup_leaf=True) for _ in range(q - degree)]
+    # start with the leafs
+    current_layer = [SketchNode(None, None, leaf_projection(d_in, proj_dim),
+                d_features, sup_leaf=False, ctr=ctr) for _ in range(degree)]
+    current_layer += [SketchNode(None, None, leaf_projection(d_in, proj_dim),
+                d_features, sup_leaf=True, ctr=ctr) for _ in range(q - degree)]
+    previous_layer = current_layer
+    current_layer = [
+        SketchNode(previous_layer[i], None,
+                    node_projection(proj_dim, proj_dim // downscale),
+                    d_features // downscale, sup_leaf=False, ctr=ctr)
+        for i in range(0, len(previous_layer))
+    ]
 
     # and go up layer by layer
     for _ in range(int(np.log2(q))):
@@ -106,8 +130,8 @@ def construct_sketch_tree(projection, degree, d_in, d_features, srht=False):
         previous_layer = current_layer
         current_layer = [
             SketchNode(previous_layer[i], previous_layer[i+1],
-                        projection(proj_dim, proj_dim),
-                        d_features, sup_leaf=False)
+                        node_projection(proj_dim, proj_dim // downscale),
+                        d_features // downscale, sup_leaf=False, ctr=ctr)
             for i in range(0, len(previous_layer), 2)
         ]
     
@@ -141,7 +165,8 @@ class PolynomialSketch(torch.nn.Module):
         """
         super(PolynomialSketch, self).__init__()
         self.d_in = d_in
-        if complex_real:
+        if complex_real and not hierarchical:
+            # in the hierarchical construction, we take care of halving the features separately
             d_features = d_features // 2
         self.d_features = d_features
         self.degree = degree
@@ -169,24 +194,27 @@ class PolynomialSketch(torch.nn.Module):
         self.log_var = torch.nn.Parameter(torch.ones(1, device=device).float() * np.log(var), requires_grad=trainable_kernel)
 
         if projection_type == 'srht':
-            projection = lambda d_in, d_out: SRHT(d_in, d_out, complex_weights=self.complex_weights, full_cov=full_cov, device=device)
+            node_projection = lambda d_in, d_out: SRHT(d_in, d_out, complex_weights=self.complex_weights, full_cov=full_cov, device=device)
         elif projection_type == 'rademacher':
-            projection = lambda d_in, d_out: RademacherTransform(d_in, d_out, complex_weights=self.complex_weights, device=device)
+            node_projection = lambda d_in, d_out: RademacherTransform(d_in, d_out, complex_weights=self.complex_weights, device=device)
         elif projection_type == 'gaussian':
-            projection = lambda d_in, d_out: GaussianTransform(d_in, d_out, complex_weights=self.complex_weights, device=device)
+            node_projection = lambda d_in, d_out: GaussianTransform(d_in, d_out, complex_weights=self.complex_weights, device=device)
         elif projection_type.split('_')[0] == 'countsketch':
-            projection = lambda d_in, d_out: CountSketch(d_in, d_out, sketch_type=projection_type.split('_')[1],
+            node_projection = lambda d_in, d_out: CountSketch(d_in, d_out, sketch_type=projection_type.split('_')[1],
                 complex_weights=self.complex_weights, device=device)
         elif projection_type.split('_')[0] == 'osnap':
-            projection = lambda d_in, d_out: OSNAP(d_in, d_out, s=num_osnap_samples, sketch_type=projection_type.split('_')[1],
+            node_projection = lambda d_in, d_out: OSNAP(d_in, d_out, s=num_osnap_samples, sketch_type=projection_type.split('_')[1],
                 complex_weights=self.complex_weights, device=device)
+
+        leaf_projection = lambda d_in, d_out: CountSketch(d_in, d_out, sketch_type='scatter',
+                complex_weights=False, device=device)
 
         # the number of leaf nodes is p
         if self.hierarchical:
-            self.root = construct_sketch_tree(projection, degree, self.d_in, d_features, srht=(projection_type=='srht'))
+            self.root = construct_sketch_tree(node_projection, leaf_projection, degree, self.d_in, d_features, srht=(projection_type=='srht'), ctr=complex_real)
         else:
             self.sketch_list = torch.nn.ModuleList(
-                [projection(self.d_in, self.d_features) for _ in range(degree)]
+                [node_projection(self.d_in, self.d_features) for _ in range(degree)]
             )
 
     def resample(self):
@@ -236,8 +264,8 @@ class PolynomialSketch(torch.nn.Module):
 
     def forward(self, x):
         # (hierarchical) random feature construction
-        if self.complex_weights and self.projection_type != 'srht':
-            x = x.type(torch.complex64)
+        # if self.complex_weights and self.projection_type != 'srht':
+        #     x = x.type(torch.complex64)
 
         # we first apply the lengthscale
         x = x / self.log_lengthscale.exp()
@@ -255,7 +283,7 @@ class PolynomialSketch(torch.nn.Module):
 
         x = x * torch.exp(self.log_var / 2.)
 
-        if self.complex_real:
+        if self.complex_real and not self.hierarchical:
             x = torch.cat([x.real, x.imag], dim=-1)
 
         return x
@@ -293,14 +321,15 @@ if __name__ == "__main__":
     bias = 1.-2./a**2
     lengthscale = a / np.sqrt(2.)
     complex_weights = True
-    hierarchical = False
+    complex_real = False
+    hierarchical = True
     projection_type = 'srht'
 
     ref_kernel = reference_kernel(data, degree, bias, log_lengthscale=np.log(lengthscale))
 
     # dims = [1024, 2048, 4096, 8192, 2*8192]
     # dims = [2*8000]
-    dims = [512 * i for i in range(1, 6)]
+    dims = [512 * i // 2 for i in range(1, 6)]
     # dims = [20*1024]
 
     for D in dims:
@@ -319,7 +348,8 @@ if __name__ == "__main__":
                 trainable_kernel=False,
                 projection_type=projection_type,
                 hierarchical=hierarchical,
-                complex_weights=complex_weights
+                complex_weights=complex_weights,
+                complex_real=complex_real
             )
             ts.resample()
             # features = tensorsketch(data, 2, 0, num_features=10000)

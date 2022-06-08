@@ -282,6 +282,8 @@ class RademacherTransform(torch.nn.Module):
             (self.d_in, self.d_features), complex_weights=self.complex_weights, device=self.device)
 
     def forward(self, x):
+        if self.complex_weights:
+            x = x.type(torch.complex64)
         return torch.matmul(x, self.weights)
 
 
@@ -306,4 +308,6 @@ class GaussianTransform(torch.nn.Module):
         self.weights.data = torch.randn(self.d_in, self.d_features, dtype=dtype, device=self.device)
 
     def forward(self, x):
+        if self.complex_weights:
+            x = x.type(torch.complex64)
         return torch.matmul(x, self.weights)

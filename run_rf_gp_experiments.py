@@ -467,7 +467,9 @@ if __name__ == '__main__':
         #     rf_parameters['projection_range']['max']+1,
         #     rf_parameters['projection_range']['step']
         # )]
-        dimensions = [int(pow_2_shape * i) for i in [0.125, 0.25, 0.5] + list(range(1,11))]
+        dimensions = [int(pow_2_shape * i) for i in range(1,11)] # [0.125, 0.25, 0.5]
+        dimensions += [2**i for i in range(7, 14)]
+        dimensions = list(set(dimensions))
 
         for seed in range(args.num_seeds):
             torch.manual_seed(seed)
