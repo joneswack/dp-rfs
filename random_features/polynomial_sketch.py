@@ -62,7 +62,8 @@ class SketchNode:
 
                 # if the child is a leaf, we do not combine its projection
                 # moreover, we immediately return this projection
-                return c1
+                # only if using additional countsketch
+                # return c1
 
             # combine both children if they are not the leaf nodes
             else:
@@ -113,17 +114,22 @@ def construct_sketch_tree(node_projection, leaf_projection, degree, d_in, d_feat
         proj_dim = d_features
 
     # start with the leafs
-    current_layer = [SketchNode(None, None, leaf_projection(d_in, proj_dim),
-                d_features, sup_leaf=False, ctr=ctr) for _ in range(degree)]
-    current_layer += [SketchNode(None, None, leaf_projection(d_in, proj_dim),
-                d_features, sup_leaf=True, ctr=ctr) for _ in range(q - degree)]
-    previous_layer = current_layer
-    current_layer = [
-        SketchNode(previous_layer[i], None,
-                    node_projection(proj_dim, proj_dim // downscale),
-                    d_features // downscale, sup_leaf=False, ctr=ctr)
-        for i in range(0, len(previous_layer))
-    ]
+    # current_layer = [SketchNode(None, None, leaf_projection(d_in, proj_dim),
+    #             d_features, sup_leaf=False, ctr=ctr) for _ in range(degree)]
+    # current_layer += [SketchNode(None, None, leaf_projection(d_in, proj_dim),
+    #             d_features, sup_leaf=True, ctr=ctr) for _ in range(q - degree)]
+    # previous_layer = current_layer
+    # current_layer = [
+    #     SketchNode(previous_layer[i], None,
+    #                 node_projection(proj_dim, proj_dim // downscale),
+    #                 d_features // downscale, sup_leaf=False, ctr=ctr)
+    #     for i in range(0, len(previous_layer))
+    # ]
+
+    current_layer = [SketchNode(None, None, node_projection(d_in, proj_dim // downscale),
+                d_features // downscale, sup_leaf=False, ctr=ctr) for _ in range(degree)]
+    current_layer += [SketchNode(None, None, node_projection(d_in, proj_dim // downscale),
+                d_features // downscale, sup_leaf=True, ctr=ctr) for _ in range(q - degree)]
 
     # and go up layer by layer
     for _ in range(int(np.log2(q))):
@@ -334,30 +340,33 @@ if __name__ == '__main__':
     if args.use_gpu:
         data = data.cuda()
 
-    degree = 20
-    a = 4.
+    degree = 7
+    a = 2.
     bias = 1.-2./a**2
     lengthscale = a / np.sqrt(2.)
     complex_weights = True
-    complex_real = False
-    hierarchical = True
+    complex_real = True
+    hierarchical = False
     projection_type = 'srht'
 
     ref_kernel = reference_kernel(data, degree, bias, log_lengthscale=np.log(lengthscale))
 
     # dims = [1024, 2048, 4096, 8192, 2*8192]
     # dims = [2*8000]
-    dims = [512 * i // 2 for i in range(1, 6)]
+    # dims = [512 * i // 2 for i in range(1, 6)]
+    up_dim = 2*32768
+    down_dims = [2048, 4096, 6144, 8192, 10240]
     # dims = [20*1024]
 
-    for D in dims:
+    for D in down_dims:
+        # D = D // 2
         scores = []
-        for seed in np.arange(30):
+        for seed in np.arange(100):
             torch.manual_seed(seed)
 
             ts = PolynomialSketch(
                 d_in=data.shape[1],
-                d_features=D,
+                d_features=up_dim, # D
                 degree=degree,
                 bias=bias,
                 lengthscale=lengthscale,
@@ -368,7 +377,7 @@ if __name__ == '__main__':
                 hierarchical=hierarchical,
                 complex_weights=complex_weights,
                 complex_real=complex_real,
-                device=('gpu' if args.use_gpu else 'cpu')
+                device=('cuda' if args.use_gpu else 'cpu')
             )
             ts.resample()
             # features = tensorsketch(data, 2, 0, num_features=10000)
@@ -376,8 +385,29 @@ if __name__ == '__main__':
 
             projection = ts.forward(data)
 
+            ts = PolynomialSketch(
+                d_in=up_dim,
+                d_features=D, # D
+                degree=1,
+                bias=0,
+                lengthscale=1.,
+                var = 1.,
+                ard = False,
+                trainable_kernel=False,
+                projection_type=projection_type,
+                hierarchical=hierarchical,
+                complex_weights=False,
+                complex_real=False,
+                device=('cuda' if args.use_gpu else 'cpu')
+            )
+            ts.resample()
+            # features = tensorsketch(data, 2, 0, num_features=10000)
+            # features = ts.forward(data)
+
+            projection = ts.forward(projection)            
+
             approx_kernel = projection @ projection.conj().t()
-            if approx_kernel.dtype in [torch.complex32, torch.complex64, torch.complex128]:
+            if approx_kernel.dtype in [torch.complex64, torch.complex128]: # torch.complex32
                 approx_kernel = approx_kernel.real
 
             # score = torch.abs(approx_kernel - ref_kernel) / torch.abs(ref_kernel)
