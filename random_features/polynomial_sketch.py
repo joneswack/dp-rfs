@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import sys, os
+import argparse
 sys.path.append(os.path.join(os.path.dirname(__file__), "../"))
 
 from random_features.projections import CountSketch, OSNAP, SRHT, RademacherTransform, GaussianTransform
@@ -290,7 +291,20 @@ class PolynomialSketch(torch.nn.Module):
 
 
 ### Launch this script directly in order to verify correct implementation of the sketches
-if __name__ == "__main__":
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--use_gpu', dest='use_gpu', action='store_true')
+    parser.set_defaults(use_gpu=False)
+
+    args = parser.parse_args()
+
+    return args
+
+
+if __name__ == '__main__':
+
+    args = parse_args()
+
     def reference_kernel(data, k, c, log_lengthscale='auto'):
         if isinstance(log_lengthscale, str) and log_lengthscale == 'auto':
             # lengthscale = sqrt(d_in)
@@ -304,10 +318,11 @@ if __name__ == "__main__":
     #data = torch.rand(100, 127)
     #data = data - data.mean(dim=0)
     # data, train_labels = torch.load('../datasets/export/cifar10/pytorch/train_cifar10_resnet34_final.pth')
-    # data, train_labels = torch.load('../datasets/export/mnist/pytorch/train_mnist.pth')
+    data, train_labels = torch.load('../datasets/export/mnist/pytorch/train_mnist.pth')
     # data, train_labels = torch.load('../datasets/export/fashion_mnist/pytorch/train_fashion_mnist.pth')
-    data, train_labels = torch.load('../datasets/export/eeg/pytorch/eeg.pth')
+    # data, train_labels = torch.load('../datasets/export/eeg/pytorch/eeg.pth')
     data = data.view(len(data), -1)
+    data = data - data.min()
     data = pad_data_pow_2(data)[:,:-1]
     
     #data = data - data.mean(dim=0)
@@ -315,6 +330,9 @@ if __name__ == "__main__":
     data = data[indices]
 
     data = data / data.norm(dim=1, keepdim=True)
+
+    if args.use_gpu:
+        data = data.cuda()
 
     degree = 20
     a = 4.
@@ -349,7 +367,8 @@ if __name__ == "__main__":
                 projection_type=projection_type,
                 hierarchical=hierarchical,
                 complex_weights=complex_weights,
-                complex_real=complex_real
+                complex_real=complex_real,
+                device=('gpu' if args.use_gpu else 'cpu')
             )
             ts.resample()
             # features = tensorsketch(data, 2, 0, num_features=10000)
