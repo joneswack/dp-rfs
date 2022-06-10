@@ -321,7 +321,7 @@ if __name__ == '__main__':
     d_in = 1024
     d_out = 10000
     a = 2
-    p = 20
+    p = 10
     num_components = 10
     complex_weights = True
     projection_type = 'gaussian'
