@@ -14,7 +14,7 @@ class SketchNode:
     This is only used for hierarchical sketches.
     """
 
-    def __init__(self, left, right, projection, d_features, sup_leaf=False, ctr=False):
+    def __init__(self, left, right, projection, d_features, sup_leaf=False):
         """
         left: Left child node
         right: Right child node
@@ -63,7 +63,7 @@ class SketchNode:
                 # if the child is a leaf, we do not combine its projection
                 # moreover, we immediately return this projection
                 # only if using additional countsketch
-                # return c1
+                return c1
 
             # combine both children if they are not the leaf nodes
             else:
@@ -83,13 +83,9 @@ class SketchNode:
                     output = c1 * output / np.sqrt(self.d_features)
                     output[:, self.d_features:] = 0
 
-                    # if the output is complex, return CtR
-                    if self.ctr:
-                        output = torch.cat([output.real, output.imag], dim=-1)
-
                     return output
 
-def construct_sketch_tree(node_projection, leaf_projection, degree, d_in, d_features, srht=False, ctr=False):
+def construct_sketch_tree(node_projection, leaf_projection, degree, d_in, d_features, srht=False):
     """
     Constructs a binary tree composed of SketchNodes (only used for hierarchical sketches).
 
@@ -98,13 +94,10 @@ def construct_sketch_tree(node_projection, leaf_projection, degree, d_in, d_feat
     degree: The degree of the polynomial kernel
     d_in: Data input dimension
     d_features: Projection dimension
-    ctr: whether complex-to-real projections are used. in this case we need to project to D//2
     """
 
     q = int(2.**np.ceil(np.log2(degree))) # e.g. degree 5 -> 8
     q = max(q, 2) # even for degree 1, we construct a sketch tree
-
-    downscale = 2 if ctr else 1
 
     if srht:
         # in the case of srht, we need to project to the power of 2
@@ -114,22 +107,22 @@ def construct_sketch_tree(node_projection, leaf_projection, degree, d_in, d_feat
         proj_dim = d_features
 
     # start with the leafs
-    # current_layer = [SketchNode(None, None, leaf_projection(d_in, proj_dim),
-    #             d_features, sup_leaf=False, ctr=ctr) for _ in range(degree)]
-    # current_layer += [SketchNode(None, None, leaf_projection(d_in, proj_dim),
-    #             d_features, sup_leaf=True, ctr=ctr) for _ in range(q - degree)]
-    # previous_layer = current_layer
-    # current_layer = [
-    #     SketchNode(previous_layer[i], None,
-    #                 node_projection(proj_dim, proj_dim // downscale),
-    #                 d_features // downscale, sup_leaf=False, ctr=ctr)
-    #     for i in range(0, len(previous_layer))
-    # ]
+    current_layer = [SketchNode(None, None, leaf_projection(d_in, proj_dim),
+                d_features, sup_leaf=False) for _ in range(degree)]
+    current_layer += [SketchNode(None, None, leaf_projection(d_in, proj_dim),
+                d_features, sup_leaf=True) for _ in range(q - degree)]
+    previous_layer = current_layer
+    current_layer = [
+        SketchNode(previous_layer[i], None,
+                    node_projection(proj_dim, proj_dim),
+                    d_features, sup_leaf=False)
+        for i in range(0, len(previous_layer))
+    ]
 
-    current_layer = [SketchNode(None, None, node_projection(d_in, proj_dim // downscale),
-                d_features // downscale, sup_leaf=False, ctr=ctr) for _ in range(degree)]
-    current_layer += [SketchNode(None, None, node_projection(d_in, proj_dim // downscale),
-                d_features // downscale, sup_leaf=True, ctr=ctr) for _ in range(q - degree)]
+    # current_layer = [SketchNode(None, None, node_projection(d_in, proj_dim // downscale),
+    #             d_features // downscale, sup_leaf=False, ctr=ctr) for _ in range(degree)]
+    # current_layer += [SketchNode(None, None, node_projection(d_in, proj_dim // downscale),
+    #             d_features // downscale, sup_leaf=True, ctr=ctr) for _ in range(q - degree)]
 
     # and go up layer by layer
     for _ in range(int(np.log2(q))):
@@ -137,8 +130,8 @@ def construct_sketch_tree(node_projection, leaf_projection, degree, d_in, d_feat
         previous_layer = current_layer
         current_layer = [
             SketchNode(previous_layer[i], previous_layer[i+1],
-                        node_projection(proj_dim, proj_dim // downscale),
-                        d_features // downscale, sup_leaf=False, ctr=ctr)
+                        node_projection(proj_dim, proj_dim),
+                        d_features, sup_leaf=False)
             for i in range(0, len(previous_layer), 2)
         ]
     
@@ -172,7 +165,7 @@ class PolynomialSketch(torch.nn.Module):
         """
         super(PolynomialSketch, self).__init__()
         self.d_in = d_in
-        if complex_real and not hierarchical:
+        if complex_real:
             # in the hierarchical construction, we take care of halving the features separately
             d_features = d_features // 2
         self.d_features = d_features
@@ -218,7 +211,7 @@ class PolynomialSketch(torch.nn.Module):
 
         # the number of leaf nodes is p
         if self.hierarchical:
-            self.root = construct_sketch_tree(node_projection, leaf_projection, degree, self.d_in, d_features, srht=(projection_type=='srht'), ctr=complex_real)
+            self.root = construct_sketch_tree(node_projection, leaf_projection, degree, self.d_in, d_features, srht=(projection_type=='srht'))
         else:
             self.sketch_list = torch.nn.ModuleList(
                 [node_projection(self.d_in, self.d_features) for _ in range(degree)]
@@ -290,7 +283,7 @@ class PolynomialSketch(torch.nn.Module):
 
         x = x * torch.exp(self.log_var / 2.)
 
-        if self.complex_real and not self.hierarchical:
+        if self.complex_real:
             x = torch.cat([x.real, x.imag], dim=-1)
 
         return x

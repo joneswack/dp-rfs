@@ -58,6 +58,32 @@ def regression_scores(test_mean, test_vars, test_labels):
 
     return test_mse, test_mnll
 
+def frobenius_norm(k_hat, k):
+    difference = k_hat - k
+    frob_error = difference.pow(2).sum().sqrt()
+    rel_frob_error = frob_error / k.pow(2).sum().sqrt()
+    return frob_error, rel_frob_error
+
+def spectral_norm(k_hat, k):
+    difference = k_hat - k
+    evals, _ = torch.linalg.eigh(difference)
+    lambda_min = evals[0]
+    lambda_max = evals[-1]
+
+    assert lambda_max >= lambda_min
+    spectral_norm = max(lambda_max, -lambda_min)
+
+    evals, _ = torch.linalg.eigh(k)
+    lambda_min = evals[0]
+    lambda_max = evals[-1]
+
+    assert lambda_max >= lambda_min
+    ref_spectral_norm = max(lambda_max, -lambda_min)
+
+    rel_spectral_norm = spectral_norm / ref_spectral_norm
+
+    return spectral_norm, rel_spectral_norm
+
 def exact_marginal_log_likelihood(kernel_train, training_labels, log_noise_var):
     n = len(training_labels)
     L_train = torch.cholesky(kernel_train + torch.exp(log_noise_var) * torch.eye(n, dtype=torch.float, device=kernel_train.device), upper=False)

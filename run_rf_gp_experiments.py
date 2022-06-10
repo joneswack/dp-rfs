@@ -13,7 +13,7 @@ from random_features.polynomial_sketch import PolynomialSketch
 from random_features.maclaurin import Maclaurin
 import util.data
 
-from util.helper_functions import kl_factorized_gaussian
+from util.helper_functions import kl_factorized_gaussian, spectral_norm, frobenius_norm
 from util.helper_functions import classification_scores, regression_scores
 from util.kernels import gaussian_kernel, polynomial_kernel
 from util.measures import Fixed_Measure, Polynomial_Measure, P_Measure
@@ -139,7 +139,7 @@ def prepare_data(config, args, rf_parameters, data_name, current_train, current_
 
     return meta_data_dict
 
-def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
+def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, seed):
     """
     Runs a random feature GP and computes performance compared to ground truth.
     Returns a dictionary of performance metrics and meta data to be logged later on.
@@ -232,7 +232,7 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
                 min_degree=rf_parameters['min_sampling_degree'])
             print('Optimized distribution: {}'.format(feature_encoder.measure.distribution))
     else:
-        feature_encoder = PolynomialSketch(train_data_padded.shape[1], d_features,
+        feature_encoder = PolynomialSketch(train_data_padded.shape[1], up_features,
                                         degree=config['degree'], bias=config['bias'],
                                         projection_type=config['proj'], hierarchical=config['hierarchical'],
                                         complex_weights=config['complex_weights'], complex_real=comp_real,
@@ -244,6 +244,16 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
         feature_encoder.resample(num_points_w=5000)
     else:
         feature_encoder.resample()
+
+    if config['craft']:
+        feature_encoder_2 = PolynomialSketch(up_features, down_features,
+                                        degree=1, bias=0,
+                                        projection_type='srht', hierarchical=False,
+                                        complex_weights=False, complex_real=False,
+                                        full_cov=False, lengthscale=1.,
+                                        device=('cuda' if args.use_gpu else 'cpu'),
+                                        var=1.0, ard=False, trainable_kernel=False)
+        feature_encoder_2.resample()
 
     het_gp = HeteroskedasticGP(None)
 
@@ -259,6 +269,10 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
     train_features = feature_encoder.forward(train_data_padded)
     test_features = feature_encoder.forward(test_data_padded)
 
+    if config['craft']:
+        train_features = feature_encoder_2.forward(train_features)
+        test_features = feature_encoder_2.forward(test_features)
+
     if args.use_gpu:
         torch.cuda.synchronize()
 
@@ -269,11 +283,8 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
     if config['complex_weights']:
         approx_kernel = approx_kernel.real
 
-    difference = approx_kernel - ref_kernel
-    mse = difference.pow(2).mean()
-    mean_error = difference.abs().mean()
-    # ||K_hat - K|| / ||K||
-    rel_frob_error = (difference.pow(2).sum().sqrt() / ref_kernel.pow(2).sum().sqrt())
+    rel_frob_error, frob_error = frobenius_norm(approx_kernel, ref_kernel)
+    rel_spec_error, spec_error = spectral_norm(approx_kernel, ref_kernel)
 
     ### run subsampled GP for KL divergence
     f_test_mean_est, f_test_stds_est = het_gp.predictive_dist(
@@ -335,6 +346,7 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
         'proj': config['proj'],
         'comp': config['complex_weights'],
         'comp_real': comp_real,
+        'craft': config['craft'],
         'full_cov': full_cov,
         'hier': config['hierarchical'],
         'kernel_var': feature_encoder.log_var.exp().item(),
@@ -342,13 +354,15 @@ def run_rf_gp(data_dict, d_features, config, args, rf_params, seed):
         'test_error': test_error,
         'test_mnll': test_mnll,
         'test_label_var': test_label_var,
-        'k_mse': mse.item(),
-        'k_mean_error': mean_error.item(),
+        'k_frob_error': frob_error.item(),
         'k_rel_frob_error': rel_frob_error.item(),
+        'k_spec_error': spec_error.item(),
+        'k_rel_spec_error': rel_spec_error.item(),
         'test_kl': test_kl.item(),
         'test_mean_mse': test_mean_mse.item(),
         'test_var_mse': test_var_mse.item(),
-        'D': d_features,
+        'D': down_features,
+        'E': up_features,
         'feature_dist': feature_dist,
         'noise_var': noise_var,
         'feature_time': feature_time,
@@ -439,7 +453,7 @@ if __name__ == '__main__':
                         noise_var, regression=regression
                     )
 
-                    log_dir = run_rf_gp(data_dict, d_features, baseline_config, args, rf_parameters, 0)
+                    log_dir = run_rf_gp(data_dict, d_features, d_features, baseline_config, args, rf_parameters, 0)
                 except Exception as e:
                     print(e)
                     print('Skipping current configuration...')
@@ -462,14 +476,17 @@ if __name__ == '__main__':
 
         print('Comparing approximations...')
         
-        # dimensions = [pow_2_shape * i for i in range(
-        #     rf_parameters['projection_range']['min'],
-        #     rf_parameters['projection_range']['max']+1,
-        #     rf_parameters['projection_range']['step']
-        # )]
-        dimensions = [int(pow_2_shape * i) for i in range(1,11)] # [0.125, 0.25, 0.5]
-        dimensions += [2**i for i in range(7, 14)]
-        dimensions = list(set(dimensions))
+        down_features_list = [pow_2_shape * i for i in range(
+            rf_parameters['projection_range']['min'],
+            rf_parameters['projection_range']['max']+1,
+            rf_parameters['projection_range']['step']
+        )]
+        # up projection dimension of craft maps (must be power of 2 for subsequent srht)
+        up_features = pow_2_shape * rf_parameters['craft_factor']
+        up_features = int(2**np.ceil(np.log2(up_features)))
+        # dimensions = [int(pow_2_shape * i) for i in range(1,11)] # [0.125, 0.25, 0.5]
+        # dimensions += [2**i for i in range(7, 14)]
+        # dimensions = list(set(dimensions))
 
         for seed in range(args.num_seeds):
             torch.manual_seed(seed)
@@ -492,7 +509,7 @@ if __name__ == '__main__':
 
             del current_train, current_test
 
-            for d_features in dimensions:
+            for down_features in down_features_list:
                 for config in configurations:
                     if config['complex_weights'] and d_features > 5*pow_2_shape:
                         continue
@@ -507,10 +524,12 @@ if __name__ == '__main__':
                         config['degree'] = 0
                     if 'hierarchical' not in config.keys():
                         config['hierarchical'] = False
+                    if 'craft' not in config.keys():
+                        config['craft'] = False
 
                     with torch.no_grad():
                         try:
-                            log_dir = run_rf_gp(data_dict, d_features, config, args, rf_parameters, seed)
+                            log_dir = run_rf_gp(data_dict, down_features, up_features, config, args, rf_parameters, seed)
                             log_handler.append(log_dir)
                             csv_handler.append(log_dir)
                             csv_handler.save()
