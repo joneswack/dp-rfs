@@ -179,7 +179,7 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
     if rf_params['kernel'] == 'gaussian':
         # we use a wrapper class that summarizes all Gaussian approximators
         feature_encoder = GaussianApproximator(
-            train_data_padded.shape[1], d_features,
+            train_data_padded.shape[1], up_features,
             approx_degree=rf_params['max_sampling_degree'], lengthscale=data_dict['lengthscale'],
             var=data_dict['kernel_var'], trainable_kernel=False, method=config['method'],
             projection_type=config['proj'], hierarchical=config['hierarchical'],
@@ -189,7 +189,7 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
             min_sampling_degree=rf_params['min_sampling_degree'])
     # otherwise we use the polynomial kernel
     elif config['method'] == 'srf':
-        feature_encoder = Spherical(train_data_padded.shape[1], d_features,
+        feature_encoder = Spherical(train_data_padded.shape[1], up_features,
                             lengthscale=1.0, var=1.0, ard=False,
                             discrete_pdf=False, num_pdf_components=10,
                             complex_weights=config['complex_weights'],
@@ -210,7 +210,7 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
             kernel_coefs = lambda x: Polynomial_Measure.coefs(x, config['degree'], config['bias'])
             measure = P_Measure(2., False, config['degree'])
 
-        feature_encoder = Maclaurin(train_data_padded.shape[1], d_features, coef_fun=kernel_coefs,
+        feature_encoder = Maclaurin(train_data_padded.shape[1], up_features, coef_fun=kernel_coefs,
                                     module_args={
                                         'projection': config['proj'],
                                         'hierarchical': config['hierarchical'],
@@ -283,8 +283,8 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
     if config['complex_weights']:
         approx_kernel = approx_kernel.real
 
-    rel_frob_error, frob_error = frobenius_norm(approx_kernel, ref_kernel)
-    rel_spec_error, spec_error = spectral_norm(approx_kernel, ref_kernel)
+    frob_error, rel_frob_error = frobenius_norm(approx_kernel, ref_kernel)
+    spec_error, rel_spec_error = spectral_norm(approx_kernel, ref_kernel)
 
     ### run subsampled GP for KL divergence
     f_test_mean_est, f_test_stds_est = het_gp.predictive_dist(
