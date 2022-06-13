@@ -176,10 +176,12 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
     f_test_stds_ref = data_dict['f_test_stds_ref']
     regression = data_dict['regression']
 
+    proj_dim = up_features if config['craft'] else down_features
+
     if rf_params['kernel'] == 'gaussian':
         # we use a wrapper class that summarizes all Gaussian approximators
         feature_encoder = GaussianApproximator(
-            train_data_padded.shape[1], up_features,
+            train_data_padded.shape[1], proj_dim,
             approx_degree=rf_params['max_sampling_degree'], lengthscale=data_dict['lengthscale'],
             var=data_dict['kernel_var'], trainable_kernel=False, method=config['method'],
             projection_type=config['proj'], hierarchical=config['hierarchical'],
@@ -189,7 +191,7 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
             min_sampling_degree=rf_params['min_sampling_degree'])
     # otherwise we use the polynomial kernel
     elif config['method'] == 'srf':
-        feature_encoder = Spherical(train_data_padded.shape[1], up_features,
+        feature_encoder = Spherical(train_data_padded.shape[1], proj_dim,
                             lengthscale=1.0, var=1.0, ard=False,
                             discrete_pdf=False, num_pdf_components=10,
                             complex_weights=config['complex_weights'],
@@ -210,7 +212,7 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
             kernel_coefs = lambda x: Polynomial_Measure.coefs(x, config['degree'], config['bias'])
             measure = P_Measure(2., False, config['degree'])
 
-        feature_encoder = Maclaurin(train_data_padded.shape[1], up_features, coef_fun=kernel_coefs,
+        feature_encoder = Maclaurin(train_data_padded.shape[1], proj_dim, coef_fun=kernel_coefs,
                                     module_args={
                                         'projection': config['proj'],
                                         'hierarchical': config['hierarchical'],
@@ -232,7 +234,7 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
                 min_degree=rf_parameters['min_sampling_degree'])
             print('Optimized distribution: {}'.format(feature_encoder.measure.distribution))
     else:
-        feature_encoder = PolynomialSketch(train_data_padded.shape[1], up_features,
+        feature_encoder = PolynomialSketch(train_data_padded.shape[1], proj_dim,
                                         degree=config['degree'], bias=config['bias'],
                                         projection_type=config['proj'], hierarchical=config['hierarchical'],
                                         complex_weights=config['complex_weights'], complex_real=comp_real,
