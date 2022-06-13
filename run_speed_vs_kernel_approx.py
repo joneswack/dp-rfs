@@ -118,7 +118,7 @@ for config in rf_configs:
         sketch = PolynomialSketch(
             input_data.shape[1], D, degree=p, bias=bias, lengthscale=lengthscale, device=device,
             projection_type=config['proj'], full_cov=config['full_cov'], complex_real=config['complex_real'],
-            convolute_ts=(config['proj'].startswith('countsketch')), complex_weights=config['complex_weights']
+            complex_weights=config['complex_weights']
         ).to(device)
 
         kernel_mse_errors = np.zeros(repetitions)

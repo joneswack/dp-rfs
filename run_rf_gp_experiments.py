@@ -268,12 +268,31 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
 
     start = time.time()
 
-    train_features = feature_encoder.forward(train_data_padded)
-    test_features = feature_encoder.forward(test_data_padded)
+    num_elements = 5000
 
-    if config['craft']:
-        train_features = feature_encoder_2.forward(train_features)
-        test_features = feature_encoder_2.forward(test_features)
+    train_features = None
+    test_features = None
+
+    for phase in ['train', 'test']:
+        if phase == 'train':
+            data = train_data_padded
+        else:
+            data = test_data_padded
+
+        num_splits = int(np.ceil(len(data)/float(num_elements)))
+        projections = []
+        for i in range(num_splits):
+            features = feature_encoder.forward(data[i*num_elements:(i+1)*num_elements])
+
+            if config['craft']:
+                features = feature_encoder_2.forward(features)
+
+            projections.append(features)
+
+        if phase == 'train':
+            train_features = torch.cat(projections, dim=0)
+        else:
+            test_features = torch.cat(projections, dim=0)
 
     if args.use_gpu:
         torch.cuda.synchronize()
@@ -305,6 +324,7 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
 
     ### gp prediction
     if args.use_gpu:
+        torch.cuda.empty_cache()
         torch.cuda.synchronize()
     start = time.time()
 
@@ -449,17 +469,17 @@ if __name__ == '__main__':
         for noise_var in noise_vars:
             # config, data_name, current_train, current_test, train_labels, test_labels, num_samples, noise_var, regression=False
             with torch.no_grad():
-                try:
-                    data_dict = prepare_data(baseline_config, args, rf_parameters,
-                        data_name, sub_data, val_data, sub_labels, val_labels,
-                        noise_var, regression=regression
-                    )
+                # try:
+                data_dict = prepare_data(baseline_config, args, rf_parameters,
+                    data_name, sub_data, val_data, sub_labels, val_labels,
+                    noise_var, regression=regression
+                )
 
-                    log_dir = run_rf_gp(data_dict, d_features, d_features, baseline_config, args, rf_parameters, 0)
-                except Exception as e:
-                    print(e)
-                    print('Skipping current configuration...')
-                    continue
+                log_dir = run_rf_gp(data_dict, d_features, d_features, baseline_config, args, rf_parameters, 0)
+                # except Exception as e:
+                #     print(e)
+                #     print('Skipping current configuration...')
+                #     continue
 
             noise_var_csv_handler.append(log_dir)
             log_handler.append(log_dir)
