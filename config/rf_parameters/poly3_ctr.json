@@ -6,8 +6,8 @@
     "min_sampling_degree": 2,
     "max_sampling_degree": 10,
     "projection_range": {
-        "min": 1,
-        "max": 10,
+        "min": 9,
+        "max": 14,
         "step": 1
     },
     "craft_factor": 20,

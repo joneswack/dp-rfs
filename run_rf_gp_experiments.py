@@ -433,7 +433,7 @@ if __name__ == '__main__':
 
         print('Determining noise variance...')
         # we select noise_vars according to validation mnll on random fourier features
-        d_features = int(pow_2_shape * rf_parameters['projection_range']['max'])
+        d_features = int(2 ** rf_parameters['projection_range']['max'])
 
         noise_var_csv_handler = util.data.DF_Handler(rf_parameters['save_name'] + '_noise_var', '{}'.format(data_name))
         sub_data, val_data, sub_labels, val_labels = util.data.create_train_val_split(train_data, train_labels, train_size=0.9)
@@ -478,14 +478,21 @@ if __name__ == '__main__':
 
         print('Comparing approximations...')
         
-        down_features_list = [pow_2_shape * i for i in range(
+        # down_features_list = [pow_2_shape * i for i in range(
+        #     rf_parameters['projection_range']['min'],
+        #     rf_parameters['projection_range']['max']+1,
+        #     rf_parameters['projection_range']['step']
+        # )]
+
+        down_features_list = [2**i for i in range(
             rf_parameters['projection_range']['min'],
             rf_parameters['projection_range']['max']+1,
             rf_parameters['projection_range']['step']
         )]
         # up projection dimension of craft maps (must be power of 2 for subsequent srht)
-        up_features = pow_2_shape * rf_parameters['craft_factor']
-        up_features = int(2**np.ceil(np.log2(up_features)))
+        # up_features = pow_2_shape * rf_parameters['craft_factor']
+        # up_features = int(2**np.ceil(np.log2(up_features)))
+        up_features = 2**(rf_parameters['projection_range']['max']+1)
         # dimensions = [int(pow_2_shape * i) for i in range(1,11)] # [0.125, 0.25, 0.5]
         # dimensions += [2**i for i in range(7, 14)]
         # dimensions = list(set(dimensions))

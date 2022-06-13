@@ -66,7 +66,7 @@ class HeteroskedasticGP(nn.Module):
                 train_features = train_data
                 test_features = test_data
 
-            if train_features.dtype in [torch.complex32, torch.complex64, torch.complex128]:
+            if train_features.dtype in [torch.complex64, torch.complex128]:
                 train_labels = train_labels.type(train_features.dtype)
                 noise_vars = noise_vars.type(train_features.dtype)
             
@@ -84,7 +84,7 @@ class HeteroskedasticGP(nn.Module):
                 alpha = cholesky_solve(xTy, L_sigma_inv)
 
                 f_test_mean = test_features @ alpha
-                if f_test_mean.dtype in [torch.complex32, torch.complex64, torch.complex128]:
+                if f_test_mean.dtype in [torch.complex64, torch.complex128]:
                     f_test_mean = f_test_mean.real
                 # bottleneck (cannot be accelerated without using a lot of memory)
                 L_sigma_X_t = torch.triangular_solve(test_features.conj().t(), L_sigma_inv, upper=False)[0]
