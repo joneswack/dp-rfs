@@ -1,7 +1,7 @@
 {
     "regression": [
-        "config/datasets/boston.json"
     ],
     "classification": [
+        "config/datasets/covertype.json"
     ]
 }
