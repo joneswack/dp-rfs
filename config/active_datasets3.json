@@ -2,6 +2,6 @@
     "regression": [
     ],
     "classification": [
-        "config/datasets/covertype.json"
+        "config/datasets/mnist.json"
     ]
 }

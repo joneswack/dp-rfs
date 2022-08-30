@@ -1,0 +1,8 @@
+{
+    "name": "Movielens100K",
+    "train_data": "../datasets/export/movielens_100k/pytorch/train_movielens100k.pth",
+    "test_data": "../datasets/export/movielens_100k/pytorch/test_movielens100k.pth",
+    "normalize": true,
+    "standardize": false,
+    "regression": false
+}

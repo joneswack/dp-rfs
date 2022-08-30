@@ -68,40 +68,76 @@ configs = [
     {'name': 'CtR-ProductSRHT', 'proj': 'srht', 'full_cov': False, 'complex_weights': True, 'complex_real': True, 'hierarchical': False},
 ]
 
-def plot_max_error_sparsity(args):
-    # errors = [[list()] * args.num_seeds] * args.num_steps
-    step_size = args.max_d_in // args.num_steps
-    steps = list(range(step_size, args.max_d_in+step_size, step_size))
-    concentrations = list(range(1, 15, 1))
-    # steps = [2, 4, 8, 16, 32] # , 64, 128
-    # steps = [32,64]
+def plot_error_hists(args):
+    Ds = [32, 64, 128, 256*1, 256*2, 256*3, 256*4, 2048]
 
     plt.figure()
+
+    d = 128
+
+    # data = torch.ones(1, d).float()
+    data = torch.ones(100, d).float()
+    data[0, 1:] = 0 # nnz=2 is worst for TensorSketch
+    data[1, 0] = 0
+    data[1, 2:] = 0
+    data = data / data.norm(dim=1, keepdim=True)
+
+    D=1024
 
     for config in configs:
         # we generate the same data set for every config
         torch.manual_seed(42)
-        errors = torch.zeros(len(concentrations), args.num_seeds)
+        errors = torch.zeros(args.num_seeds)
 
-        for i, concentration in enumerate(concentrations):
-            data = torch.zeros(1024, 64)
-            data[:, :concentration+1] = 1.
-            for k in range(len(data)):
-                data[k,:] = data[k, torch.randperm(len(data[k]))]
+        for j in range(args.num_seeds):
+            errors[j] = sketch_error(data, D, config, args).max()
 
-            # data = data / data.norm(dim=1, keepdim=True)
-            
+        # we draw a histogram per config
+        plt.hist(errors, label=config['name'], bins=100)
+    
+    # plt.yscale('log')
+    plt.legend()
+    plt.show()
+
+def plot_error_over_D(args):
+    Ds = [32, 64, 128, 256*1, 256*2, 256*3, 256*4, 2048]
+
+    plt.figure()
+
+    d = 128
+
+    data = torch.zeros(200, d).float()
+    data[:100, :] = torch.ones(100, d).float()
+    # data[0, 1:] = 0
+    # data[0,0] = np.sqrt(d)
+    # data[1, :] = 0
+    # data[1, 1] = np.sqrt(d)
+    data[100:, :100] = torch.eye(100)*np.sqrt(d)
+    data = data / data.norm(dim=1, keepdim=True)
+
+    for config in configs:
+        # we generate the same data set for every config
+        torch.manual_seed(42)
+        errors = torch.zeros(len(Ds), args.num_seeds)
+
+        for i, D in enumerate(Ds):
             for j in range(args.num_seeds):
-                errors[i,j] = sketch_error(data, 64, config, args).max()
+                errors[i,j] = sketch_error(data, D, config, args).mean()
 
         # we draw an error graph for every config
-        error_means = errors.mean(dim=1)
+        error_means = errors.mean(dim=1)# .values
         error_stds = errors.std(dim=1)
-        plt.errorbar(concentrations, error_means.numpy(), yerr=error_stds.numpy(), label=config['name'])
+
+        print('Config: {}, Std: {}'.format(config['name'], error_stds.numpy()))
+
+        if config['name'] == 'TensorSketch':
+            plt.errorbar(Ds, error_means.numpy(), yerr=error_stds.numpy(), label=config['name'] + '(Std: {:2f})'.format(error_stds[-1].item()))
+        else:
+            plt.plot(Ds, error_means.numpy(), label=config['name'] + '(Std: {:2f})'.format(error_stds[-1].item()))
     
-    plt.xticks(concentrations)
-    plt.xlabel('# non-zeros')
-    plt.ylabel('Max. Error')
+    plt.xticks(Ds)
+    plt.xlabel('D')
+    plt.ylabel('|k_hat-k|')
     # plt.yscale('log')
     plt.legend()
     plt.show()
@@ -116,7 +152,9 @@ def plot_max_error_adult(args):
 
     # we only unit-normalize in the other experiments
     # X = X[:,5:] # keep only one-hot data
-    X_pad = torch.zeros(len(X), 128)
+    X_pad = torch.zeros(len(X), 1024)
+    X = X - X.min()
+    X = X.view(len(X), -1)
     X_pad[:,:X.shape[1]] = X
     # X_pad = X
     # X_pad = X_pad / X_pad.norm(dim=1, keepdim=True)
@@ -126,7 +164,7 @@ def plot_max_error_adult(args):
         torch.manual_seed(42)
         errors = torch.zeros(args.num_seeds)
         for j in range(args.num_seeds):
-            errors[j] = sketch_error(X_pad[:1000], 512, config, args).mean()
+            errors[j] = sketch_error(X_pad[:1000], 2048, config, args).mean()
 
         error_mean = errors.mean()
         error_std = errors.std()
@@ -140,4 +178,6 @@ if __name__ == '__main__':
     # plot_max_error_sparsity(args)
 
     ### analyze adult data set
+    # plot_error_over_D(args)
     plot_max_error_adult(args)
+    # plot_error_hists(args)
