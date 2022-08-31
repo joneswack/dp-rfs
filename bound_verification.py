@@ -7,34 +7,44 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from random_features.polynomial_sketch import PolynomialSketch
+from random_features.spherical import Spherical
 
 """
 Replication of Matlab experiment from
 https://github.com/google-research/google-research/blob/master/poly_kernel_sketch/matlab/MaxError.m
 """
 
-def relative_sketch_error(data, D, config, args):
+def sketch_error(data, D, config, args):
     comp_real = config['complex_real'] if 'complex_real' in config.keys() else False
     full_cov = config['full_cov'] if 'full_cov' in config.keys() else False
 
-    feature_encoder = PolynomialSketch(
-        data.shape[1], D,
-        degree=args.degree, bias=args.bias,
-        projection_type=config['proj'], hierarchical=config['hierarchical'],
-        complex_weights=config['complex_weights'], complex_real=comp_real,
-        full_cov=full_cov, lengthscale=1.0,
-        device=('cuda' if args.use_gpu else 'cpu'),
-        var=1.0, ard=False, trainable_kernel=False
-    )
-    feature_encoder.resample()
+    if config['name'] == 'SRF':
+        feature_encoder = Spherical(data.shape[1], D,
+                            lengthscale=1.0, var=1.0, ard=False,
+                            discrete_pdf=False, num_pdf_components=10,
+                            complex_weights=config['complex_weights'],
+                            projection_type=config['proj'], device=('cuda' if args.use_gpu else 'cpu'))
+        feature_encoder.load_model('saved_models/poly_a{}.0_p{}_d{}.torch'.format(args.a, args.degree, data.shape[1]))
+    else:
+        feature_encoder = PolynomialSketch(
+            data.shape[1], D,
+            degree=args.degree, bias=args.bias,
+            projection_type=config['proj'], hierarchical=config['hierarchical'],
+            complex_weights=config['complex_weights'], complex_real=comp_real,
+            full_cov=full_cov, lengthscale=1.0,
+            device=('cuda' if args.use_gpu else 'cpu'),
+            var=1.0, ard=False, trainable_kernel=False
+        )
+    
+    if config['name'] == 'SRF':
+        feature_encoder.resample(num_points_w=5000)
+    else:
+        feature_encoder.resample()
 
     features = feature_encoder.forward(data)
     k_hat = features @ features.t()
     k_target = (data @ data.t())**args.degree
-    norms = data.norm(dim=1, keepdim=True) * data.norm(dim=1, keepdim=True).t()
-    # relative error with ||x||^p because ||x^(p)||=||x||^p
-    # i.e. we bound Pr{ |k_hat - k| >= e ||x|| ||y|| } <= \delta
-    k_error = (k_hat - k_target).abs() / norms**args.degree
+    k_error = (k_hat - k_target).abs()
 
     return k_error
 
@@ -45,7 +55,8 @@ def parse_args():
                         help='Path to RF parameter file')
     parser.add_argument('--datasets_file', type=str, required=False, default='config/active_datasets3.json',
                         help='List of datasets to be used for the experiments')
-    parser.add_argument('--degree', type=int, required=False, default=2)
+    parser.add_argument('--degree', type=int, required=False, default=3)
+    parser.add_argument('--a', type=int, required=False, default=2)
     parser.add_argument('--bias', type=int, required=False, default=0)
     parser.add_argument('--max_D', type=int, required=False, default=10000)
     parser.add_argument('--max_d_in', type=int, required=False, default=40,
@@ -63,6 +74,7 @@ def parse_args():
 
 configs = [
     {'name': 'TensorSketch', 'proj': 'countsketch_scatter', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
+    {'name': 'SRF', 'proj': 'srf', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
     {'name': 'Rademacher', 'proj': 'rademacher', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
     {'name': 'CtR-Rademacher', 'proj': 'rademacher', 'full_cov': False, 'complex_weights': True, 'complex_real': True, 'hierarchical': False},
     {'name': 'ProductSRHT', 'proj': 'srht', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
@@ -74,7 +86,7 @@ def plot_error_hists(args):
 
     plt.figure()
 
-    d = 128
+    d = 64
 
     # data = torch.ones(1, d).float()
     data = torch.ones(100, d).float()
@@ -91,7 +103,7 @@ def plot_error_hists(args):
         errors = torch.zeros(args.num_seeds)
 
         for j in range(args.num_seeds):
-            errors[j] = relative_sketch_error(data, D, config, args).max()
+            errors[j] = sketch_error(data, D, config, args).max()
 
         # we draw a histogram per config
         plt.hist(errors, label=config['name'], bins=100)
@@ -101,47 +113,67 @@ def plot_error_hists(args):
     plt.show()
 
 def plot_error_over_D(args):
-    Ds = [32, 64, 128, 256*1, 256*2, 256*3, 256*4, 2048]
+    # Ds = [32, 64, 128, 256*1, 256*2, 256*3, 256*4, 2048]
+    Ds = [256*2, 256*3, 256*4, 2048]
 
     plt.figure()
 
-    d = 128
+    d = 64
 
-    data = torch.zeros(200, d).float()
-    data[:100, :] = torch.ones(100, d).float()
+    # data = torch.zeros(100, d).float()
+    # data[:100, :] = torch.ones(100, d).float()
     # data[0, 1:] = 0
     # data[0,0] = np.sqrt(d)
     # data[1, :] = 0
     # data[1, 1] = np.sqrt(d)
-    data[100:, :100] = torch.eye(100)*np.sqrt(d)
+    # data[100:, :100] = torch.eye(100)*np.sqrt(d)
+    # data[:,:100] = torch.eye(100)
+    bias = 1.-2./args.a**2
+    lengthscale = args.a / np.sqrt(2.)
+
+    data = torch.zeros(1, d)
+    data[:, :5] = 1.0
     data = data / data.norm(dim=1, keepdim=True)
+
+    data = data / lengthscale
+    data[:, -1] = np.sqrt(bias)
+
+    if args.use_gpu:
+        data = data.cuda()
 
     for config in configs:
         # we generate the same data set for every config
         torch.manual_seed(42)
-        errors = torch.zeros(len(Ds), args.num_seeds)
+        errors = torch.zeros(len(Ds), args.num_seeds, device=('cuda' if args.use_gpu else 'cpu'))
 
         for i, D in enumerate(Ds):
             for j in range(args.num_seeds):
-                errors[i,j] = relative_sketch_error(data, D, config, args).mean()
+                errors[i,j] = sketch_error(data, D, config, args).mean()
+
+        norms = data.norm(dim=1, keepdim=True) * data.norm(dim=1, keepdim=True).t()
+        # relative error with ||x||^p because ||x^(p)||=||x||^p
+        # i.e. we bound Pr{ |k_hat - k| >= e ||x|| ||y|| } <= \delta
+        errors = errors / norms**args.degree
 
         # we draw an error graph for every config
-        error_means = errors.mean(dim=1)# .values
+        # error_means = errors.max(dim=1).values
+        error_means = (errors > 0.1).float().mean(dim=1)
         error_stds = errors.std(dim=1)
 
-        print('Config: {}, Std: {}'.format(config['name'], error_stds.numpy()))
+        print('Config: {}, Std: {}'.format(config['name'], error_stds.cpu().numpy()))
 
-        if config['name'] == 'TensorSketch':
-            plt.errorbar(Ds, error_means.numpy(), yerr=error_stds.numpy(), label=config['name'] + '(Std: {:2f})'.format(error_stds[-1].item()))
-        else:
-            plt.plot(Ds, error_means.numpy(), label=config['name'] + '(Std: {:2f})'.format(error_stds[-1].item()))
+        # if config['name'] == 'TensorSketch':
+            # plt.errorbar(Ds, error_means.cpu().numpy(), yerr=error_stds.cpu().numpy(), label=config['name'] + '(Std: {:2f})'.format(error_stds[-1].item()))
+        # else:
+        plt.plot(Ds, error_means.cpu().numpy(), label=config['name'] + '(Std: {:2f})'.format(error_stds[-1].item()))
     
     plt.xticks(Ds)
     plt.xlabel('D')
     plt.ylabel('|k_hat-k|')
     # plt.yscale('log')
     plt.legend()
-    plt.show()
+
+    plt.savefig('figures/max_err_vs_sparsity.pdf', dpi=300)
 
 def plot_max_error_dataset(args):
     with open(args.datasets_file) as json_file:
@@ -169,7 +201,8 @@ def plot_max_error_dataset(args):
         torch.manual_seed(42)
         errors = torch.zeros(args.num_seeds)
         for j in range(args.num_seeds):
-            errors[j] = relative_sketch_error(X_pad[:args.num_samples], 2048, config, args).mean()
+            # mean error
+            errors[j] = sketch_error(X_pad[:args.num_samples], 2048, config, args).mean()
 
         error_mean = errors.mean().cpu().item()
         error_std = errors.std().cpu().item()
@@ -183,6 +216,6 @@ if __name__ == '__main__':
     # plot_max_error_sparsity(args)
 
     ### analyze adult data set
-    # plot_error_over_D(args)
-    plot_max_error_dataset(args)
+    plot_error_over_D(args)
+    # plot_max_error_dataset(args)
     # plot_error_hists(args)
