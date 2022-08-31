@@ -13,7 +13,7 @@ Replication of Matlab experiment from
 https://github.com/google-research/google-research/blob/master/poly_kernel_sketch/matlab/MaxError.m
 """
 
-def sketch_error(data, D, config, args):
+def relative_sketch_error(data, D, config, args):
     comp_real = config['complex_real'] if 'complex_real' in config.keys() else False
     full_cov = config['full_cov'] if 'full_cov' in config.keys() else False
 
@@ -30,7 +30,7 @@ def sketch_error(data, D, config, args):
 
     features = feature_encoder.forward(data)
     k_hat = features @ features.t()
-    k_target = data @ data.t()
+    k_target = (data @ data.t())**args.degree
     norms = data.norm(dim=1, keepdim=True) * data.norm(dim=1, keepdim=True).t()
     # relative error with ||x||^p because ||x^(p)||=||x||^p
     # i.e. we bound Pr{ |k_hat - k| >= e ||x|| ||y|| } <= \delta
@@ -53,6 +53,7 @@ def parse_args():
     parser.add_argument('--num_steps', type=int, required=False, default=20)
     parser.add_argument('--num_seeds', type=int, required=False, default=1000,
                         help='Number of seeds (runs)')
+    parser.add_argument('--num_samples', type=int, required=False, default=1000)
     parser.add_argument('--use_gpu', dest='use_gpu', action='store_true')
     parser.set_defaults(use_gpu=False)
 
@@ -90,7 +91,7 @@ def plot_error_hists(args):
         errors = torch.zeros(args.num_seeds)
 
         for j in range(args.num_seeds):
-            errors[j] = sketch_error(data, D, config, args).max()
+            errors[j] = relative_sketch_error(data, D, config, args).max()
 
         # we draw a histogram per config
         plt.hist(errors, label=config['name'], bins=100)
@@ -122,7 +123,7 @@ def plot_error_over_D(args):
 
         for i, D in enumerate(Ds):
             for j in range(args.num_seeds):
-                errors[i,j] = sketch_error(data, D, config, args).mean()
+                errors[i,j] = relative_sketch_error(data, D, config, args).mean()
 
         # we draw an error graph for every config
         error_means = errors.mean(dim=1)# .values
@@ -142,7 +143,7 @@ def plot_error_over_D(args):
     plt.legend()
     plt.show()
 
-def plot_max_error_adult(args):
+def plot_max_error_dataset(args):
     with open(args.datasets_file) as json_file:
         dataset_file = json.load(json_file)
         dataset_path = dataset_file['classification'][0]
@@ -157,17 +158,21 @@ def plot_max_error_adult(args):
     X = X.view(len(X), -1)
     X_pad[:,:X.shape[1]] = X
     # X_pad = X
-    # X_pad = X_pad / X_pad.norm(dim=1, keepdim=True)
+    X_pad = X_pad / X_pad.norm(dim=1, keepdim=True)
     X_pad = X_pad[torch.randperm(len(X_pad)), :]
     # concentrations are X.max(dim=1).values
+
+    if args.use_gpu:
+        X_pad = X_pad.cuda()
+
     for config in configs:
         torch.manual_seed(42)
         errors = torch.zeros(args.num_seeds)
         for j in range(args.num_seeds):
-            errors[j] = sketch_error(X_pad[:1000], 2048, config, args).mean()
+            errors[j] = relative_sketch_error(X_pad[:args.num_samples], 2048, config, args).mean()
 
-        error_mean = errors.mean()
-        error_std = errors.std()
+        error_mean = errors.mean().cpu().item()
+        error_std = errors.std().cpu().item()
         print(config['name'], 'Mean: {}'.format(error_mean), 'Std: {}'.format(error_std))
 
 
@@ -179,5 +184,5 @@ if __name__ == '__main__':
 
     ### analyze adult data set
     # plot_error_over_D(args)
-    plot_max_error_adult(args)
+    plot_max_error_dataset(args)
     # plot_error_hists(args)
