@@ -74,7 +74,7 @@ def parse_args():
 
 configs = [
     {'name': 'TensorSketch', 'proj': 'countsketch_scatter', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
-    {'name': 'SRF', 'proj': 'srf', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
+    # {'name': 'SRF', 'proj': 'srf', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
     {'name': 'Rademacher', 'proj': 'rademacher', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
     {'name': 'CtR-Rademacher', 'proj': 'rademacher', 'full_cov': False, 'complex_weights': True, 'complex_real': True, 'hierarchical': False},
     {'name': 'ProductSRHT', 'proj': 'srht', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
@@ -86,7 +86,7 @@ def plot_error_hists(args):
 
     plt.figure()
 
-    d = 64
+    d = 128
 
     # data = torch.ones(1, d).float()
     data = torch.ones(100, d).float()
@@ -114,7 +114,8 @@ def plot_error_hists(args):
 
 def plot_error_over_D(args):
     # Ds = [32, 64, 128, 256*1, 256*2, 256*3, 256*4, 2048]
-    Ds = [256*2, 256*3, 256*4, 2048]
+    Ds = [i*128 for i in range(1, 10)]
+    # Ds = [896]
 
     plt.figure()
 
@@ -128,15 +129,15 @@ def plot_error_over_D(args):
     # data[1, 1] = np.sqrt(d)
     # data[100:, :100] = torch.eye(100)*np.sqrt(d)
     # data[:,:100] = torch.eye(100)
-    bias = 1.-2./args.a**2
-    lengthscale = args.a / np.sqrt(2.)
+    # bias = 1.-2./args.a**2
+    # lengthscale = args.a / np.sqrt(2.)
 
-    data = torch.zeros(1, d)
-    data[:, :5] = 1.0
+    data = torch.ones(1, d)
+    data[:, :2] = d
     data = data / data.norm(dim=1, keepdim=True)
 
-    data = data / lengthscale
-    data[:, -1] = np.sqrt(bias)
+    # data = data / lengthscale
+    # data[:, -1] = np.sqrt(bias)
 
     if args.use_gpu:
         data = data.cuda()
@@ -148,16 +149,16 @@ def plot_error_over_D(args):
 
         for i, D in enumerate(Ds):
             for j in range(args.num_seeds):
-                errors[i,j] = sketch_error(data, D, config, args).mean()
+                errors[i,j] = sketch_error(data, D, config, args).double().mean()
 
-        norms = data.norm(dim=1, keepdim=True) * data.norm(dim=1, keepdim=True).t()
+        norms = (data.norm(dim=1, keepdim=True) * data.norm(dim=1, keepdim=True).t()).double()
         # relative error with ||x||^p because ||x^(p)||=||x||^p
         # i.e. we bound Pr{ |k_hat - k| >= e ||x|| ||y|| } <= \delta
         errors = errors / norms**args.degree
 
         # we draw an error graph for every config
         # error_means = errors.max(dim=1).values
-        error_means = (errors > 0.1).float().mean(dim=1)
+        error_means = (errors > 0.25).float().mean(dim=1)
         error_stds = errors.std(dim=1)
 
         print('Config: {}, Std: {}'.format(config['name'], error_stds.cpu().numpy()))
@@ -170,10 +171,45 @@ def plot_error_over_D(args):
     plt.xticks(Ds)
     plt.xlabel('D')
     plt.ylabel('|k_hat-k|')
-    # plt.yscale('log')
+    plt.yscale('log')
     plt.legend()
 
     plt.savefig('figures/max_err_vs_sparsity.pdf', dpi=300)
+
+def plot_max_error_sparsity(args):
+    # errors = [[list()] * args.num_seeds] * args.num_steps
+    concentrations = list(range(2, 15, 2))
+    # steps = [2, 4, 8, 16, 32] # , 64, 128
+    # steps = [32,64]
+    # data = data / data.norm(dim=1, keepdim=True)
+
+    plt.figure()
+
+    for config in configs:
+        # we generate the same data set for every config
+        torch.manual_seed(42)
+        errors = torch.zeros(len(concentrations), args.num_seeds)
+
+        for i, concentration in enumerate(concentrations):
+            data = torch.zeros(1024, 64)
+            data[:, :concentration+1] = 1.
+
+            # data = data / data.norm(dim=1, keepdim=True)
+            
+            for j in range(args.num_seeds):
+                errors[i,j] = sketch_error(data, 64, config, args).max()
+
+        # we draw an error graph for every config
+        error_means = errors.mean(dim=1)
+        error_stds = errors.std(dim=1)
+        plt.errorbar(concentrations, error_means.numpy(), yerr=error_stds.numpy(), label=config['name'])
+    
+    plt.xticks(concentrations)
+    plt.xlabel('# non-zeros')
+    plt.ylabel('Max. Error')
+    # plt.yscale('log')
+    plt.legend()
+    plt.show()
 
 def plot_max_error_dataset(args):
     with open(args.datasets_file) as json_file:
