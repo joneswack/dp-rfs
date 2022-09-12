@@ -5,16 +5,21 @@ import json
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+# import multiprocessing
 
 from random_features.polynomial_sketch import PolynomialSketch
 from random_features.spherical import Spherical
+import util.data
 
 """
 Replication of Matlab experiment from
 https://github.com/google-research/google-research/blob/master/poly_kernel_sketch/matlab/MaxError.m
 """
 
-def sketch_error(data, D, config, args):
+def sketch_error(data, D, config, args, seed):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+
     comp_real = config['complex_real'] if 'complex_real' in config.keys() else False
     full_cov = config['full_cov'] if 'full_cov' in config.keys() else False
 
@@ -62,7 +67,7 @@ def parse_args():
     parser.add_argument('--max_d_in', type=int, required=False, default=40,
                         help='Number of data samples for lengthscale estimation')
     parser.add_argument('--num_steps', type=int, required=False, default=20)
-    parser.add_argument('--num_seeds', type=int, required=False, default=1000,
+    parser.add_argument('--num_seeds', type=int, required=False, default=30000,
                         help='Number of seeds (runs)')
     parser.add_argument('--num_samples', type=int, required=False, default=1000)
     parser.add_argument('--use_gpu', dest='use_gpu', action='store_true')
@@ -77,11 +82,12 @@ configs = [
     # {'name': 'SRF', 'proj': 'srf', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
     {'name': 'Rademacher', 'proj': 'rademacher', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
     {'name': 'CtR-Rademacher', 'proj': 'rademacher', 'full_cov': False, 'complex_weights': True, 'complex_real': True, 'hierarchical': False},
-    {'name': 'ProductSRHT', 'proj': 'srht', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
-    {'name': 'CtR-ProductSRHT', 'proj': 'srht', 'full_cov': False, 'complex_weights': True, 'complex_real': True, 'hierarchical': False},
+    {'name': 'ProductSRHT', 'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
+    {'name': 'CtR-ProductSRHT', 'proj': 'srht', 'full_cov': True, 'complex_weights': True, 'complex_real': True, 'hierarchical': False},
 ]
 
 def plot_error_hists(args):
+
     Ds = [32, 64, 128, 256*1, 256*2, 256*3, 256*4, 2048]
 
     plt.figure()
@@ -112,14 +118,21 @@ def plot_error_hists(args):
     plt.legend()
     plt.show()
 
+def sketch_error_seed(data, D, config, args, seed):
+    return sketch_error(data, D, config, args, seed).view(-1) # .mean()
+
 def plot_error_over_D(args):
+
+    d = 2
+
+    log_handler = util.data.Log_Handler('bound_plot', 'over_D_samples_{}_seeds_{}_d{}'.format(args.num_samples, args.num_seeds, d))
+    csv_handler = util.data.DF_Handler('bound_plot', 'over_D_samples_{}_seeds_{}_d{}'.format(args.num_samples, args.num_seeds, d))
+
     # Ds = [32, 64, 128, 256*1, 256*2, 256*3, 256*4, 2048]
-    Ds = [i*128 for i in range(1, 10)]
+    Ds = [i*64 for i in range(1, 30)]
     # Ds = [896]
 
     plt.figure()
-
-    d = 64
 
     # data = torch.zeros(100, d).float()
     # data[:100, :] = torch.ones(100, d).float()
@@ -132,84 +145,131 @@ def plot_error_over_D(args):
     # bias = 1.-2./args.a**2
     # lengthscale = args.a / np.sqrt(2.)
 
-    data = torch.ones(1, d)
-    data[:, :2] = d
+    data = torch.zeros(1, 64)
+    data[:, :d] = 1.0
     data = data / data.norm(dim=1, keepdim=True)
+
+    norms = (data.norm(dim=1, keepdim=True) * data.norm(dim=1, keepdim=True).t()).double()
 
     # data = data / lengthscale
     # data[:, -1] = np.sqrt(bias)
 
+    # pool = multiprocessing.Pool(4)
     if args.use_gpu:
         data = data.cuda()
 
     for config in configs:
         # we generate the same data set for every config
-        torch.manual_seed(42)
-        errors = torch.zeros(len(Ds), args.num_seeds, device=('cuda' if args.use_gpu else 'cpu'))
+        # errors = torch.zeros(len(Ds), args.num_seeds, device=('cuda' if args.use_gpu else 'cpu'))
 
         for i, D in enumerate(Ds):
-            for j in range(args.num_seeds):
-                errors[i,j] = sketch_error(data, D, config, args).double().mean()
+            # data, D, config, args, seed
+            # output = pool.starmap(sketch_error_seed, zip(
+            #     [data]*args.num_seeds,
+            #     [D]*args.num_seeds,
+            #     [config]*args.num_seeds,
+            #     [args]*args.num_seeds,
+            #     list(range(0, args.num_seeds, 1))
+            # ))
 
-        norms = (data.norm(dim=1, keepdim=True) * data.norm(dim=1, keepdim=True).t()).double()
-        # relative error with ||x||^p because ||x^(p)||=||x||^p
-        # i.e. we bound Pr{ |k_hat - k| >= e ||x|| ||y|| } <= \delta
-        errors = errors / norms**args.degree
+            # errors = torch.hstack(output)
 
-        # we draw an error graph for every config
-        # error_means = errors.max(dim=1).values
-        error_means = (errors > 0.25).float().mean(dim=1)
-        error_stds = errors.std(dim=1)
+            errors = torch.zeros(args.num_seeds)
 
-        print('Config: {}, Std: {}'.format(config['name'], error_stds.cpu().numpy()))
+            for j, seed in enumerate(range(args.num_seeds)):
+                errors[j] = sketch_error_seed(data, D, config, args, seed)
 
-        # if config['name'] == 'TensorSketch':
-            # plt.errorbar(Ds, error_means.cpu().numpy(), yerr=error_stds.cpu().numpy(), label=config['name'] + '(Std: {:2f})'.format(error_stds[-1].item()))
-        # else:
-        plt.plot(Ds, error_means.cpu().numpy(), label=config['name'] + '(Std: {:2f})'.format(error_stds[-1].item()))
-    
-    plt.xticks(Ds)
-    plt.xlabel('D')
-    plt.ylabel('|k_hat-k|')
-    plt.yscale('log')
-    plt.legend()
+            # relative error with ||x||^p because ||x^(p)||=||x||^p
+            # i.e. we bound Pr{ |k_hat - k| >= e ||x|| ||y|| } <= \delta
+            errors = errors / norms**args.degree
 
-    plt.savefig('figures/max_err_vs_sparsity.pdf', dpi=300)
+            error_prob = (errors > 0.25).float().mean().item()
 
-def plot_max_error_sparsity(args):
-    # errors = [[list()] * args.num_seeds] * args.num_steps
-    concentrations = list(range(2, 15, 2))
-    # steps = [2, 4, 8, 16, 32] # , 64, 128
-    # steps = [32,64]
-    # data = data / data.norm(dim=1, keepdim=True)
+            log_dir = {
+                'proj': config['proj'],
+                'complex_real': config['complex_real'],
+                'hierarchical': config['hierarchical'],
+                'D': D,
+                'error_prob': error_prob
+            }
+
+            log_handler.append(log_dir)
+            csv_handler.append(log_dir)
+            csv_handler.save()
+
+
+def plot_error_over_sparsity(args):
+    # concentrations = [2, 4, 8, 16, 32, 64] # list(range(2, 15, 2))
+
+    log_handler = util.data.Log_Handler('bound_plot', 'over_sparsity_samples_{}_seeds_{}'.format(args.num_samples, args.num_seeds))
+    csv_handler = util.data.DF_Handler('bound_plot', 'over_sparsity_samples_{}_seeds_{}'.format(args.num_samples, args.num_seeds))
+
+    # Ds = [32, 64, 128, 256*1, 256*2, 256*3, 256*4, 2048]
+    ds = [2,3,4,5,6,7,8,9,10]
+    D = 1024
+    # Ds = [896]
 
     plt.figure()
 
+    # data = torch.zeros(100, d).float()
+    # data[:100, :] = torch.ones(100, d).float()
+    # data[0, 1:] = 0
+    # data[0,0] = np.sqrt(d)
+    # data[1, :] = 0
+    # data[1, 1] = np.sqrt(d)
+    # data[100:, :100] = torch.eye(100)*np.sqrt(d)
+    # data[:,:100] = torch.eye(100)
+    # bias = 1.-2./args.a**2
+    # lengthscale = args.a / np.sqrt(2.)
+
+    # data = data / lengthscale
+    # data[:, -1] = np.sqrt(bias)
+
+    pool = multiprocessing.Pool(4)
+    if args.use_gpu:
+        data = data.cuda()
+
     for config in configs:
         # we generate the same data set for every config
-        torch.manual_seed(42)
-        errors = torch.zeros(len(concentrations), args.num_seeds)
+        # errors = torch.zeros(len(Ds), args.num_seeds, device=('cuda' if args.use_gpu else 'cpu'))
 
-        for i, concentration in enumerate(concentrations):
-            data = torch.zeros(1024, 64)
-            data[:, :concentration+1] = 1.
+        for i, d in enumerate(ds):
+            # data, D, config, args, seed
+            data = torch.zeros(1, 64)
+            data[:, :d] = 1.0
+            data = data / data.norm(dim=1, keepdim=True)
 
-            # data = data / data.norm(dim=1, keepdim=True)
-            
-            for j in range(args.num_seeds):
-                errors[i,j] = sketch_error(data, 64, config, args).max()
+            norms = (data.norm(dim=1, keepdim=True) * data.norm(dim=1, keepdim=True).t()).double()
 
-        # we draw an error graph for every config
-        error_means = errors.mean(dim=1)
-        error_stds = errors.std(dim=1)
-        plt.errorbar(concentrations, error_means.numpy(), yerr=error_stds.numpy(), label=config['name'])
-    
-    plt.xticks(concentrations)
-    plt.xlabel('# non-zeros')
-    plt.ylabel('Max. Error')
-    # plt.yscale('log')
-    plt.legend()
-    plt.show()
+            output = pool.starmap(sketch_error_seed, zip(
+                [data]*args.num_seeds,
+                [D]*args.num_seeds,
+                [config]*args.num_seeds,
+                [args]*args.num_seeds,
+                list(range(0, args.num_seeds, 1))
+            ))
+
+            errors = torch.hstack(output)
+
+            # relative error with ||x||^p because ||x^(p)||=||x||^p
+            # i.e. we bound Pr{ |k_hat - k| >= e ||x|| ||y|| } <= \delta
+            errors = errors / norms**args.degree
+
+            error_prob = (errors > 0.25).float().mean().item()
+
+            log_dir = {
+                'proj': config['proj'],
+                'complex_real': config['complex_real'],
+                'hierarchical': config['hierarchical'],
+                'D': D,
+                'd': d,
+                'error_prob': error_prob
+            }
+
+            log_handler.append(log_dir)
+            csv_handler.append(log_dir)
+            csv_handler.save()
+
 
 def plot_max_error_dataset(args):
     with open(args.datasets_file) as json_file:
@@ -252,6 +312,6 @@ if __name__ == '__main__':
     # plot_max_error_sparsity(args)
 
     ### analyze adult data set
+    # plot_error_over_sparsity(args)
     plot_error_over_D(args)
-    # plot_max_error_dataset(args)
-    # plot_error_hists(args)
+
