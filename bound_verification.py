@@ -67,7 +67,7 @@ def parse_args():
     parser.add_argument('--max_d_in', type=int, required=False, default=40,
                         help='Number of data samples for lengthscale estimation')
     parser.add_argument('--num_steps', type=int, required=False, default=20)
-    parser.add_argument('--num_seeds', type=int, required=False, default=10000,
+    parser.add_argument('--num_seeds', type=int, required=False, default=30000,
                         help='Number of seeds (runs)')
     parser.add_argument('--num_samples', type=int, required=False, default=1000)
     parser.add_argument('--use_gpu', dest='use_gpu', action='store_true')
@@ -78,14 +78,14 @@ def parse_args():
     return args
 
 configs = [
-    # {'name': 'TensorSketch', 'proj': 'countsketch_scatter', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
+    {'name': 'TensorSketch', 'proj': 'countsketch_scatter', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
     # {'name': 'SRF', 'proj': 'srf', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
     {'name': 'Gaussian', 'proj': 'gaussian', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
     {'name': 'CtR-Gaussian', 'proj': 'gaussian', 'full_cov': False, 'complex_weights': True, 'complex_real': True, 'hierarchical': False},
     {'name': 'Rademacher', 'proj': 'rademacher', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
     {'name': 'CtR-Rademacher', 'proj': 'rademacher', 'full_cov': False, 'complex_weights': True, 'complex_real': True, 'hierarchical': False},
-    # {'name': 'ProductSRHT', 'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
-    # {'name': 'CtR-ProductSRHT', 'proj': 'srht', 'full_cov': True, 'complex_weights': True, 'complex_real': True, 'hierarchical': False},
+    {'name': 'ProductSRHT', 'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
+    {'name': 'CtR-ProductSRHT', 'proj': 'srht', 'full_cov': True, 'complex_weights': True, 'complex_real': True, 'hierarchical': False},
 ]
 
 def sketch_error_seed(data, D, p, config, args, seed):
@@ -150,10 +150,10 @@ def plot_error_over_p(args):
 
 def plot_error_over_D(args):
 
-    d = 64
+    d = 2
 
-    log_handler = util.data.Log_Handler('bound_plot', 'over_D_samples_{}_seeds_{}_d{}_2'.format(args.num_samples, args.num_seeds, d))
-    csv_handler = util.data.DF_Handler('bound_plot', 'over_D_samples_{}_seeds_{}_d{}_2'.format(args.num_samples, args.num_seeds, d))
+    log_handler = util.data.Log_Handler('bound_plot', 'over_D_samples_{}_seeds_{}_d{}_3'.format(args.num_samples, args.num_seeds, d))
+    csv_handler = util.data.DF_Handler('bound_plot', 'over_D_samples_{}_seeds_{}_d{}_3'.format(args.num_samples, args.num_seeds, d))
 
     # Ds = [32, 64, 128, 256*1, 256*2, 256*3, 256*4, 2048]
     Ds = [i*64 for i in range(1, 30)]
@@ -168,8 +168,8 @@ def plot_error_over_D(args):
     # data = data / data.norm(dim=1, keepdim=True)
 
     # new (2)
-    data = torch.ones(1, 64)
-    data[:, :4] = d
+    data = torch.ones(1,64)
+    data[:, :d] = 8
     data = data / data.norm(dim=1, keepdim=True)
 
     norms = (data.norm(dim=1, keepdim=True) * data.norm(dim=1, keepdim=True).t()).double()
@@ -333,7 +333,7 @@ if __name__ == '__main__':
 
     ### analyze adult data set
     # plot_error_over_sparsity(args)
-    # plot_error_over_D(args)
+    plot_error_over_D(args)
 
-    plot_error_over_p(args)
+    # plot_error_over_p(args)
 

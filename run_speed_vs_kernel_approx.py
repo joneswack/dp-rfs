@@ -1,5 +1,6 @@
 import torch
 from random_features.polynomial_sketch import PolynomialSketch
+from random_features.spherical import Spherical
 import util.data
 
 import numpy as np
@@ -67,11 +68,15 @@ d = 1024
 
 # polynomial kernel parameters
 p=3
-bias=1
+# bias=1
 # ONLY IF NOT UNIT-NORMALIZED
 # lengthscale = np.sqrt(input_data.shape[1])
 # IF UNIT-NORMALIZED
-lengthscale = 1.
+# lengthscale = 1.
+# for SRF
+a = 2
+bias = 1.-2./a**2
+lengthscale = a / np.sqrt(2.)
 
 # size of the random subset of the input data
 subsample_size = 1000
@@ -84,6 +89,7 @@ rf_dims_fast = [i*d for i in range(1, 31)]
 # rf_dims = [512*2]
 rf_configs = [
     {'proj': 'countsketch_scatter', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
+    {'proj': 'srf', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
     # {'proj': 'gaussian', 'full_cov': False, 'complex_real': False},
     # {'proj': 'gaussian', 'full_cov': False, 'complex_real': True},
     {'proj': 'rademacher', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
@@ -94,8 +100,8 @@ rf_configs = [
     {'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': True}
 ]
 
-log_handler = util.data.Log_Handler('time_benchmark', 'rep{}_p{}_bias{}_mnist'.format(repetitions, p, bias))
-csv_handler = util.data.DF_Handler('time_benchmark', 'rep{}_p{}_bias{}_mnist'.format(repetitions, p, bias))
+log_handler = util.data.Log_Handler('time_benchmark', 'rep{}_p{}_bias{}_len_{}_mnist'.format(repetitions, p, bias, lengthscale))
+csv_handler = util.data.DF_Handler('time_benchmark', 'rep{}_p{}_bias{}_len_{}_mnist'.format(repetitions, p, bias, lengthscale))
 
 def polynomial_kernel(X, Y, degree=3, gamma=None, coef0=1):
     if gamma is None:
@@ -115,11 +121,20 @@ for config in rf_configs:
         rf_dims = rf_dims_slow
 
     for D in rf_dims:
-        sketch = PolynomialSketch(
-            input_data.shape[1], D, degree=p, bias=bias, lengthscale=lengthscale, device=device,
-            projection_type=config['proj'], full_cov=config['full_cov'], complex_real=config['complex_real'],
-            complex_weights=config['complex_weights']
-        ).to(device)
+        if config['proj'] == 'srf':
+            sketch = Spherical(input_data.shape[1], D,
+                                lengthscale=1.0, var=1.0, ard=False,
+                                discrete_pdf=False, num_pdf_components=10,
+                                complex_weights=config['complex_weights'],
+                                projection_type=config['proj'], device=device)
+            sketch.load_model('saved_models/poly_a{}.0_p{}_d{}.torch'.format(a, p, input_data.shape[1]))
+            sketch.to(device)
+        else:
+            sketch = PolynomialSketch(
+                input_data.shape[1], D, degree=p, bias=bias, lengthscale=lengthscale, device=device,
+                projection_type=config['proj'], full_cov=config['full_cov'], complex_real=config['complex_real'],
+                complex_weights=config['complex_weights']
+            ).to(device)
 
         kernel_mse_errors = np.zeros(repetitions)
         kernel_frob_errors = np.zeros(repetitions)
@@ -130,7 +145,11 @@ for config in rf_configs:
 
         # Phase 1: Warm up
         for _ in range(repetitions):
-            sketch.resample()
+            if config['proj'] == 'srf':
+                sketch.resample(num_points_w=5000)
+            else:
+                sketch.resample()
+
             _ = sketch.forward(input_data_sample)
 
         # Phase 2: RF time measurement
@@ -138,7 +157,10 @@ for config in rf_configs:
 
         for _ in range(repetitions):
             # we do not measure the resampling time now
-            sketch.resample()
+            if config['proj'] == 'srf':
+                sketch.resample(num_points_w=5000)
+            else:
+                sketch.resample()
 
             torch.cuda.synchronize()
             start = timer()
@@ -150,7 +172,10 @@ for config in rf_configs:
         # Phase 3: Kernel estimation
         for i in range(repetitions):
             input_data_sample = input_data[torch.randperm(len(input_data), device=device)[:subsample_size]]
-            sketch.resample()
+            if config['proj'] == 'srf':
+                sketch.resample(num_points_w=5000)
+            else:
+                sketch.resample()
             y = sketch.forward(input_data_sample)
             approx_kernel = y @ y.conj().t()
             exact_kernel = polynomial_kernel(input_data_sample, input_data_sample, degree=p, gamma=1./lengthscale**2, coef0=bias)
