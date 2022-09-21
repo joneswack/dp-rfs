@@ -287,11 +287,13 @@ class VariationalGP(nn.Module):
             train_correct = 0
 
             if self.use_gpu:
-                torch.cuda.empty_cache()
+                # torch.cuda.empty_cache()
                 torch.cuda.synchronize()
             start_time = time()
 
             for _, batch_data in enumerate(train_loader):
+                if self.use_gpu:
+                    torch.cuda.empty_cache()
                 if self.use_gpu:
                     batch_data[0] = batch_data[0].cuda()
                     batch_data[1] = batch_data[1].cuda()

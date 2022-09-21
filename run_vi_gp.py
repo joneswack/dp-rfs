@@ -76,7 +76,7 @@ if __name__ == '__main__':
     # we use D=10d
     D = pow_2_shape * 10
     n_classes = train_labels.shape[1]
-    degree = 6
+    degree = 3
     a = 2
     bias = 1.-2./a**2
     lengthscale = a / np.sqrt(2.)
@@ -138,22 +138,24 @@ if __name__ == '__main__':
                     projection_type=config['proj'],
                     complex_weights=config['complex_weights'],
                     complex_real=config['complex_real'],
-                    full_complex=False,
                     full_cov=config['full_cov'],
-                    convolute_ts=True if config['proj'].startswith('countsketch') else False,
                     trainable_kernel=True,
                     device=('cuda' if args.use_gpu else 'cpu')
                 )
             
             with torch.no_grad():
-                feature_encoder.resample()
+                if config['proj'] == 'srf':
+                    feature_encoder.resample(num_points_w=5000)
+                else:
+                    feature_encoder.resample()
 
             vgp = VariationalGP(D, n_classes, feature_encoder, trainable_vars=True, covariance='factorized', use_gpu=args.use_gpu)
             if args.use_gpu:
                 vgp.cuda()
 
             # lr = 1e-3 if config['proj'].startswith('countsketch') else 1e-2
-            epochs = args.epochs if config['proj'].startswith('countsketch') else 3*args.epochs
+            # epochs = args.epochs if config['proj'].startswith('countsketch') else 3*args.epochs
+            epochs = args.epochs
             vgp.optimize_lower_bound(model_name, dataloaders['train'], dataloaders['test'], num_epochs=epochs,
                                         lr=args.lr, a=0.5, b=10, gamma=1)
 
