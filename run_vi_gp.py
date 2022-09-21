@@ -18,6 +18,7 @@ from models.vi_gp import VariationalGP
 import util.data
 
 from random_features.polynomial_sketch import PolynomialSketch
+from random_features.spherical import Spherical
 from random_features.rff import RFF
 
 """
@@ -76,11 +77,16 @@ if __name__ == '__main__':
     D = pow_2_shape * 10
     n_classes = train_labels.shape[1]
     degree = 6
+    a = 2
+    bias = 1.-2./a**2
+    lengthscale = a / np.sqrt(2.)
+
 
     print('Comparing approximations...')
 
     configurations = [
         # weights for degrees (1,2,3,4), h01, has_constant
+        {'proj': 'srf', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
         {'proj': 'countsketch_scatter', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
         # {'proj': 'gaussian', 'full_cov': False, 'complex_real': False},
         # {'proj': 'gaussian', 'full_cov': False, 'complex_real': True},
@@ -99,7 +105,7 @@ if __name__ == '__main__':
         for config in configurations:
             # we double the data dimension at every step
 
-            model_name = 'sgp_{}_proj_{}_deg_{}_compreal{}'.format(data_name, config['proj'], degree, config['complex_real'])
+            model_name = 'sgp_{}_proj_{}_deg_{}_compreal{}_2'.format(data_name, config['proj'], degree, config['complex_real'])
 
             print('Model:', model_name, 'Seed:', seed)
 
@@ -111,20 +117,33 @@ if __name__ == '__main__':
                                                         shuffle=False, num_workers=0)
             }
 
-            feature_encoder = PolynomialSketch(
-                train_data.shape[1], D,
-                degree=degree, bias=1,
-                var=train_labels.var(),
-                lengthscale=1,
-                projection_type=config['proj'],
-                complex_weights=config['complex_weights'],
-                complex_real=config['complex_real'],
-                full_complex=False,
-                full_cov=config['full_cov'],
-                convolute_ts=True if config['proj'].startswith('countsketch') else False,
-                trainable_kernel=True,
-                device=('cuda' if args.use_gpu else 'cpu')
-            )
+            if config['proj'] == 'srf':
+                feature_encoder = Spherical(
+                    train_data.shape[1], D,
+                    lengthscale=1.0, var=1.0, ard=False,
+                    discrete_pdf=False, num_pdf_components=10,
+                    complex_weights=config['complex_weights'],
+                    projection_type=config['proj'],
+                    device=('cuda' if args.use_gpu else 'cpu'),
+                    trainable_kernel=True
+                )
+                feature_encoder.load_model('saved_models/poly_a{}.0_p{}_d{}.torch'.format(a, degree, pow_2_shape))
+            else:
+
+                feature_encoder = PolynomialSketch(
+                    train_data.shape[1], D,
+                    degree=degree, bias=bias,
+                    var=train_labels.var(),
+                    lengthscale=lengthscale,
+                    projection_type=config['proj'],
+                    complex_weights=config['complex_weights'],
+                    complex_real=config['complex_real'],
+                    full_complex=False,
+                    full_cov=config['full_cov'],
+                    convolute_ts=True if config['proj'].startswith('countsketch') else False,
+                    trainable_kernel=True,
+                    device=('cuda' if args.use_gpu else 'cpu')
+                )
             
             with torch.no_grad():
                 feature_encoder.resample()

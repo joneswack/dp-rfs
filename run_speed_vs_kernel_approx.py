@@ -88,20 +88,20 @@ rf_dims_fast = [i*d for i in range(1, 31)]
 # rf_dims = [512]
 # rf_dims = [512*2]
 rf_configs = [
-    {'proj': 'countsketch_scatter', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
     {'proj': 'srf', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
+    {'proj': 'countsketch_scatter', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
     # {'proj': 'gaussian', 'full_cov': False, 'complex_real': False},
     # {'proj': 'gaussian', 'full_cov': False, 'complex_real': True},
-    {'proj': 'rademacher', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
-    {'proj': 'rademacher', 'full_cov': False, 'complex_weights': False, 'complex_real': True},
-    {'proj': 'srht', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
-    {'proj': 'srht', 'full_cov': False, 'complex_weights': True, 'complex_real': False},
     {'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': False},
-    {'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': True}
+    {'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': True},
+    {'proj': 'rademacher', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
+    # {'proj': 'rademacher', 'full_cov': False, 'complex_weights': False, 'complex_real': True},
+    # {'proj': 'srht', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
+    # {'proj': 'srht', 'full_cov': False, 'complex_weights': True, 'complex_real': False},
 ]
 
-log_handler = util.data.Log_Handler('time_benchmark', 'rep{}_p{}_bias{}_len_{}_mnist'.format(repetitions, p, bias, lengthscale))
-csv_handler = util.data.DF_Handler('time_benchmark', 'rep{}_p{}_bias{}_len_{}_mnist'.format(repetitions, p, bias, lengthscale))
+log_handler = util.data.Log_Handler('time_benchmark', 'rep{}_p{}_bias{}_len_{:.2f}_mnist'.format(repetitions, p, bias, lengthscale))
+csv_handler = util.data.DF_Handler('time_benchmark', 'rep{}_p{}_bias{}_len_{:.2f}_mnist'.format(repetitions, p, bias, lengthscale))
 
 def polynomial_kernel(X, Y, degree=3, gamma=None, coef0=1):
     if gamma is None:
@@ -114,7 +114,7 @@ for config in rf_configs:
         and (not config['complex_weights']):
         # R-TensorSRHT (DB/IB)
         rf_dims = rf_dims_fast
-    elif config['proj'] == 'countsketch_scatter':
+    elif config['proj'] in ['countsketch_scatter', 'srf']:
         # TensorSketch
         rf_dims = rf_dims_fast
     else:
@@ -127,7 +127,7 @@ for config in rf_configs:
                                 discrete_pdf=False, num_pdf_components=10,
                                 complex_weights=config['complex_weights'],
                                 projection_type=config['proj'], device=device)
-            sketch.load_model('saved_models/poly_a{}.0_p{}_d{}.torch'.format(a, p, input_data.shape[1]))
+            sketch.load_model('saved_models/poly_a{}.0_p{}_d{}.torch'.format(a, p, d))
             sketch.to(device)
         else:
             sketch = PolynomialSketch(
