@@ -540,8 +540,6 @@ if __name__ == '__main__':
 
             for down_features in down_features_list:
                 for config in configurations:
-                    if config['complex_weights'] and d_features > 5*pow_2_shape:
-                        continue
                     
                     # add bias, lengthscale and degree for the polynomial kernel
                     if rf_parameters['kernel'] == 'polynomial':

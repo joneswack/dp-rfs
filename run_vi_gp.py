@@ -76,7 +76,7 @@ if __name__ == '__main__':
     # we use D=10d
     D = pow_2_shape * 10
     n_classes = train_labels.shape[1]
-    degree = 3
+    degree = 6
     a = 2
     bias = 1.-2./a**2
     lengthscale = a / np.sqrt(2.)
@@ -105,7 +105,7 @@ if __name__ == '__main__':
         for config in configurations:
             # we double the data dimension at every step
 
-            model_name = 'sgp_{}_proj_{}_deg_{}_compreal{}_2'.format(data_name, config['proj'], degree, config['complex_real'])
+            model_name = 'sgp_{}_proj_{}_deg_{}_compreal{}_3'.format(data_name, config['proj'], degree, config['complex_real'])
 
             print('Model:', model_name, 'Seed:', seed)
 
@@ -120,7 +120,7 @@ if __name__ == '__main__':
             if config['proj'] == 'srf':
                 feature_encoder = Spherical(
                     train_data.shape[1], D,
-                    lengthscale=1.0, var=1.0, ard=False,
+                    lengthscale=1.0, var=train_labels.var(), ard=False,
                     discrete_pdf=False, num_pdf_components=10,
                     complex_weights=config['complex_weights'],
                     projection_type=config['proj'],
@@ -132,9 +132,9 @@ if __name__ == '__main__':
 
                 feature_encoder = PolynomialSketch(
                     train_data.shape[1], D,
-                    degree=degree, bias=bias,
+                    degree=degree, bias=1.0,
                     var=train_labels.var(),
-                    lengthscale=lengthscale,
+                    lengthscale=1.0,
                     projection_type=config['proj'],
                     complex_weights=config['complex_weights'],
                     complex_real=config['complex_real'],

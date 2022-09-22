@@ -27,7 +27,6 @@ class SketchNode:
         self.projection = projection
         self.d_features = d_features
         self.sup_leaf = sup_leaf
-        self.ctr = ctr
 
     def _is_leaf(self):
         return (self.left is None) and (self.right is None)
