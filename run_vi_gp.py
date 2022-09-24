@@ -85,8 +85,8 @@ if __name__ == '__main__':
     print('Comparing approximations...')
 
     configurations = [
-        # weights for degrees (1,2,3,4), h01, has_constant
         {'proj': 'srf', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
+        # weights for degrees (1,2,3,4), h01, has_constant
         {'proj': 'countsketch_scatter', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
         # {'proj': 'gaussian', 'full_cov': False, 'complex_real': False},
         # {'proj': 'gaussian', 'full_cov': False, 'complex_real': True},
@@ -105,7 +105,7 @@ if __name__ == '__main__':
         for config in configurations:
             # we double the data dimension at every step
 
-            model_name = 'sgp_{}_proj_{}_deg_{}_compreal{}_3'.format(data_name, config['proj'], degree, config['complex_real'])
+            model_name = 'sgp_{}_proj_{}_deg_{}_compreal{}_p100_nocache'.format(data_name, config['proj'], degree, config['complex_real'])
 
             print('Model:', model_name, 'Seed:', seed)
 
@@ -120,14 +120,19 @@ if __name__ == '__main__':
             if config['proj'] == 'srf':
                 feature_encoder = Spherical(
                     train_data.shape[1], D,
-                    lengthscale=1.0, var=train_labels.var(), ard=False,
+                    lengthscale=1.0, var=train_labels.var(),
                     discrete_pdf=False, num_pdf_components=10,
                     complex_weights=config['complex_weights'],
                     projection_type=config['proj'],
+                    trainable_kernel=True,
+                    ard=False,
                     device=('cuda' if args.use_gpu else 'cpu'),
-                    trainable_kernel=True
                 )
                 feature_encoder.load_model('saved_models/poly_a{}.0_p{}_d{}.torch'.format(a, degree, pow_2_shape))
+                # feature_encoder.log_lengthscale = torch.nn.Parameter(
+                #     torch.ones(feature_encoder.d_in, device=feature_encoder.device) * feature_encoder.log_lengthscale.cpu().item(),
+                #     requires_grad=True
+                # )
             else:
 
                 feature_encoder = PolynomialSketch(
@@ -140,6 +145,7 @@ if __name__ == '__main__':
                     complex_real=config['complex_real'],
                     full_cov=config['full_cov'],
                     trainable_kernel=True,
+                    ard=False,
                     device=('cuda' if args.use_gpu else 'cpu')
                 )
             

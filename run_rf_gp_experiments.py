@@ -508,11 +508,11 @@ if __name__ == '__main__':
             rf_parameters['projection_range']['min'],
             rf_parameters['projection_range']['max']+1,
             rf_parameters['projection_range']['step']
-        )]
+        )] + [10240]
         # up projection dimension of craft maps (must be power of 2 for subsequent srht)
         # up_features = pow_2_shape * rf_parameters['craft_factor']
         # up_features = int(2**np.ceil(np.log2(up_features)))
-        up_features = 2**(rf_parameters['projection_range']['max']+1)
+        up_features = 2**rf_parameters['craft_factor']
         # dimensions = [int(pow_2_shape * i) for i in range(1,11)] # [0.125, 0.25, 0.5]
         # dimensions += [2**i for i in range(7, 14)]
         # dimensions = list(set(dimensions))

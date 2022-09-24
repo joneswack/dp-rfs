@@ -2,6 +2,7 @@
     "regression": [
     ],
     "classification": [
+        "config/datasets/cifar10.json",
         "config/datasets/mnist.json"
     ]
 }
