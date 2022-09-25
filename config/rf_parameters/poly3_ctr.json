@@ -1,6 +1,6 @@
 {
     "kernel": "polynomial",
-    "save_name": "poly3_approx_ctr_craft",
+    "save_name": "poly3_approx_ctr_craft_2",
     "degree": 3,
     "a": 2,
     "min_sampling_degree": 2,

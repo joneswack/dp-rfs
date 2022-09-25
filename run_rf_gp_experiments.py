@@ -270,8 +270,8 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
 
     num_elements = 5000
 
-    train_features = None
-    test_features = None
+    train_features = torch.zeros(len(train_data_padded), down_features, device=('cuda' if args.use_gpu else 'cpu'))
+    test_features = torch.zeros(len(test_data_padded), down_features, device=('cuda' if args.use_gpu else 'cpu'))
 
     for phase in ['train', 'test']:
         if phase == 'train':
@@ -280,19 +280,21 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
             data = test_data_padded
 
         num_splits = int(np.ceil(len(data)/float(num_elements)))
-        projections = []
+        # projections = []
         for i in range(num_splits):
             features = feature_encoder.forward(data[i*num_elements:(i+1)*num_elements])
 
             if config['craft']:
                 features = feature_encoder_2.forward(features)
 
-            projections.append(features)
+            # projections.append(features)
 
         if phase == 'train':
-            train_features = torch.cat(projections, dim=0)
+            # train_features = torch.cat(projections, dim=0)
+            train_features[i*num_elements:(i+1)*num_elements, :] = features
         else:
-            test_features = torch.cat(projections, dim=0)
+            # test_features = torch.cat(projections, dim=0)
+            test_features[i*num_elements:(i+1)*num_elements, :] = features
 
     if args.use_gpu:
         torch.cuda.synchronize()

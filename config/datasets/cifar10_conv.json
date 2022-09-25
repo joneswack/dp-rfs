@@ -1,0 +1,8 @@
+{
+    "name": "cifar10_conv",
+    "train_data": "../datasets/export/cifar10/pytorch/inc_final_conv_train.pth",
+    "test_data": "../datasets/export/cifar10/pytorch/inc_final_conv_test.pth",
+    "normalize": true,
+    "standardize": false,
+    "regression": false
+}
