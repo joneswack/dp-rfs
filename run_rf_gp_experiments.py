@@ -289,12 +289,12 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
 
             # projections.append(features)
 
-        if phase == 'train':
-            # train_features = torch.cat(projections, dim=0)
-            train_features[i*num_elements:(i+1)*num_elements, :] = features
-        else:
-            # test_features = torch.cat(projections, dim=0)
-            test_features[i*num_elements:(i+1)*num_elements, :] = features
+            if phase == 'train':
+                # train_features = torch.cat(projections, dim=0)
+                train_features[i*num_elements:(i+1)*num_elements, :] = features
+            else:
+                # test_features = torch.cat(projections, dim=0)
+                test_features[i*num_elements:(i+1)*num_elements, :] = features
 
     if args.use_gpu:
         torch.cuda.synchronize()
