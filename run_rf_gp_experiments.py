@@ -523,7 +523,7 @@ if __name__ == '__main__':
             torch.manual_seed(seed)
             np.random.seed(seed)
             # create new train/val split for UCI datasets
-            if data_name not in ['MNIST', 'FashionMNIST', 'Adult', 'Cod_rna']:
+            if data_name not in ['MNIST', 'FashionMNIST', 'Adult', 'Cod_rna', 'cifar10', 'cifar10_conv']:
                 train_data = torch.cat([train_data, test_data], dim=0)
                 train_labels = torch.cat([train_labels, test_labels], dim=0)
                 current_train, current_test, current_train_labels, current_test_labels = util.data.create_train_val_split(train_data, train_labels, train_size=0.9)
