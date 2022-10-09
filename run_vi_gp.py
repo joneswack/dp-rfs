@@ -18,6 +18,7 @@ from models.vi_gp import VariationalGP
 import util.data
 
 from random_features.polynomial_sketch import PolynomialSketch
+from random_features.projections import SRHT, GaussianTransform
 from random_features.spherical import Spherical
 from random_features.rff import RFF
 
@@ -30,7 +31,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--batch_size', type=int, required=False, default=1000,
                         help='Training batch size')
-    parser.add_argument('--epochs', type=int, required=False, default=50,
+    parser.add_argument('--epochs', type=int, required=False, default=150,
                         help='Training epochs')
     parser.add_argument('--lr', type=float, required=False, default=1e-3,
                         help='Learning rate')
@@ -42,6 +43,25 @@ def parse_args():
     args = parser.parse_args()
 
     return args
+
+
+class CRAFTEncoder(torch.nn.Module):
+    def __init__(self, up_encoder, e_features, d_features, device='cpu'):
+        super(CRAFTEncoder, self).__init__()
+        self.up_encoder = up_encoder
+        # potential speedup through Gaussian projection
+        self.down_encoder = SRHT(e_features, d_features, complex_weights=False, shuffle=True, device=device)
+        self.d_features = d_features
+        self.device = device
+
+    def resample(self):
+        self.up_encoder.resample()
+        self.down_encoder.resample()
+
+    def forward(self, x):
+        x = self.up_encoder.forward(x)
+        x = self.down_encoder.forward(x) / np.sqrt(self.d_features)
+        return x
 
 
 if __name__ == '__main__':
@@ -61,9 +81,10 @@ if __name__ == '__main__':
     train_data = train_data - min_val
     test_data = test_data - min_val
     # normalize data
-    # train_data = train_data / torch.max(train_data, 0)[0]
-    train_data = train_data / train_data.norm(dim=1, keepdim=True)
-    test_data = test_data / test_data.norm(dim=1, keepdim=True)
+    train_data = train_data / torch.max(train_data, 0)[0]
+    test_data = test_data / torch.max(train_data, 0)[0]
+    # train_data = train_data / train_data.norm(dim=1, keepdim=True)
+    # test_data = test_data / test_data.norm(dim=1, keepdim=True)
 
     # We make the bias trainable...
     train_data = util.data.pad_data_pow_2(train_data)[:, :-1]
@@ -74,9 +95,11 @@ if __name__ == '__main__':
 
     pow_2_shape = int(2**np.ceil(np.log2(train_data.shape[1])))
     # we use D=10d
-    D = pow_2_shape * 10
+    # D = pow_2_shape * 10
+    D = 2**9
+    E = 2**15
     n_classes = train_labels.shape[1]
-    degree = 6
+    degree = 7
     a = 2
     bias = 1.-2./a**2
     lengthscale = a / np.sqrt(2.)
@@ -85,17 +108,17 @@ if __name__ == '__main__':
     print('Comparing approximations...')
 
     configurations = [
-        {'proj': 'srf', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
+        {'proj': 'srf', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'craft': False, 'ard': True},
         # weights for degrees (1,2,3,4), h01, has_constant
-        {'proj': 'countsketch_scatter', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
+        {'proj': 'countsketch_scatter', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'craft': True, 'ard': True},
         # {'proj': 'gaussian', 'full_cov': False, 'complex_real': False},
         # {'proj': 'gaussian', 'full_cov': False, 'complex_real': True},
         # {'proj': 'rademacher', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
         # {'proj': 'rademacher', 'full_cov': False, 'complex_weights': False, 'complex_real': True},
         # {'proj': 'srht', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
         # {'proj': 'srht', 'full_cov': False, 'complex_weights': True, 'complex_real': False},
-        {'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': False},
-        {'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': True}
+        {'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': False, 'craft': True, 'ard': True},
+        {'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': True, 'craft': True, 'ard': True}
     ]
 
     for seed in range(args.num_seeds):
@@ -105,7 +128,8 @@ if __name__ == '__main__':
         for config in configurations:
             # we double the data dimension at every step
 
-            model_name = 'sgp_{}_proj_{}_deg_{}_compreal{}_p100_nocache'.format(data_name, config['proj'], degree, config['complex_real'])
+            model_name = 'sgp_{}_proj_{}_deg_{}_compreal_{}_craft_{}_ard_{}_p100_nocache'.format(
+                data_name, config['proj'], degree, config['complex_real'], config['craft'], config['ard'])
 
             print('Model:', model_name, 'Seed:', seed)
 
@@ -118,36 +142,45 @@ if __name__ == '__main__':
             }
 
             if config['proj'] == 'srf':
-                feature_encoder = Spherical(
-                    train_data.shape[1], D,
-                    lengthscale=1.0, var=train_labels.var(),
+                up_encoder = Spherical(
+                    train_data.shape[1], E,
+                    lengthscale=1.0,
+                    var=train_labels.var(),
                     discrete_pdf=False, num_pdf_components=10,
                     complex_weights=config['complex_weights'],
                     projection_type=config['proj'],
                     trainable_kernel=True,
-                    ard=False,
+                    ard=config['ard'],
                     device=('cuda' if args.use_gpu else 'cpu'),
                 )
-                feature_encoder.load_model('saved_models/poly_a{}.0_p{}_d{}.torch'.format(a, degree, pow_2_shape))
+                up_encoder.load_model('saved_models/poly_a{}.0_p{}_d{}.torch'.format(a, degree, pow_2_shape))
                 # feature_encoder.log_lengthscale = torch.nn.Parameter(
                 #     torch.ones(feature_encoder.d_in, device=feature_encoder.device) * feature_encoder.log_lengthscale.cpu().item(),
                 #     requires_grad=True
                 # )
             else:
 
-                feature_encoder = PolynomialSketch(
-                    train_data.shape[1], D,
-                    degree=degree, bias=1.0,
+                up_encoder = PolynomialSketch(
+                    train_data.shape[1], E,
+                    degree=degree,
+                    bias=1.0 / np.sqrt(train_data.shape[1]), # for non-unit norm data
                     var=train_labels.var(),
-                    lengthscale=1.0,
+                    lengthscale=1.0 / np.sqrt(train_data.shape[1]), # for non-unit norm data
                     projection_type=config['proj'],
                     complex_weights=config['complex_weights'],
                     complex_real=config['complex_real'],
                     full_cov=config['full_cov'],
                     trainable_kernel=True,
-                    ard=False,
+                    ard=config['ard'],
                     device=('cuda' if args.use_gpu else 'cpu')
                 )
+
+            if config['craft']:
+                feature_encoder = CRAFTEncoder(up_encoder, E, D, device=up_encoder.device)
+            else:
+                feature_encoder = up_encoder
+                # CtR-features double the dimension later on again!
+                feature_encoder.d_features = D // 2 if config['complex_real'] else D
             
             with torch.no_grad():
                 if config['proj'] == 'srf':
