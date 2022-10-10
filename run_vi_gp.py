@@ -81,12 +81,12 @@ if __name__ == '__main__':
     train_data = train_data - min_val
     test_data = test_data - min_val
     # normalize data
-    train_data = train_data / torch.max(train_data)
-    test_data = test_data / torch.max(train_data)
-    # train_data = train_data / train_data.norm(dim=1, keepdim=True)
-    # test_data = test_data / test_data.norm(dim=1, keepdim=True)
+    # train_data = train_data / torch.max(train_data)
+    # test_data = test_data / torch.max(train_data)
+    train_data = train_data / train_data.norm(dim=1, keepdim=True)
+    test_data = test_data / test_data.norm(dim=1, keepdim=True)
 
-    mean_inner_product = (train_data[:5000] @ train_data[:5000].t()).mean()
+    # mean_inner_product = (train_data[:5000] @ train_data[:5000].t()).mean()
 
     # We make the bias trainable...
     train_data = util.data.pad_data_pow_2(train_data)[:, :-1]
@@ -97,11 +97,11 @@ if __name__ == '__main__':
 
     pow_2_shape = int(2**np.ceil(np.log2(train_data.shape[1])))
     # we use D=10d
-    D = pow_2_shape * 10
-    # D = 2**9
+    # D = pow_2_shape * 10
+    D = 2**13
     E = 2**15
     n_classes = train_labels.shape[1]
-    degree = 3
+    degree = 7
     a = 2
     bias = 1.-2./a**2
     lengthscale = a / np.sqrt(2.)
@@ -112,13 +112,14 @@ if __name__ == '__main__':
     configurations = [
         {'proj': 'srf', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'craft': False, 'ard': True},
         # weights for degrees (1,2,3,4), h01, has_constant
+        {'proj': 'countsketch_scatter', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'craft': False, 'ard': True},
         {'proj': 'countsketch_scatter', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'craft': True, 'ard': True},
         # {'proj': 'gaussian', 'full_cov': False, 'complex_real': False},
         # {'proj': 'gaussian', 'full_cov': False, 'complex_real': True},
         # {'proj': 'rademacher', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
         # {'proj': 'rademacher', 'full_cov': False, 'complex_weights': False, 'complex_real': True},
-        # {'proj': 'srht', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
-        # {'proj': 'srht', 'full_cov': False, 'complex_weights': True, 'complex_real': False},
+        {'proj': 'srht', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'craft': False, 'ard': True},
+        {'proj': 'srht', 'full_cov': False, 'complex_weights': False, 'complex_real': True, 'craft': False, 'ard': True},
         {'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': False, 'craft': True, 'ard': True},
         {'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': True, 'craft': True, 'ard': True}
     ]
@@ -130,7 +131,7 @@ if __name__ == '__main__':
         for config in configurations:
             # we double the data dimension at every step
 
-            model_name = 'sgp_{}_proj_{}_deg_{}_compreal_{}_craft_{}_ard_{}_p100_nocache'.format(
+            model_name = 'sgp_{}_proj_{}_deg_{}_compreal_{}_craft_{}_ard_{}_norm_nocache_t4'.format(
                 data_name, config['proj'], degree, config['complex_real'], config['craft'], config['ard'])
 
             print('Model:', model_name, 'Seed:', seed)
@@ -168,7 +169,7 @@ if __name__ == '__main__':
                     degree=degree,
                     bias=1.0, # for non-unit norm data
                     var=train_labels.var(), # train_labels.var(),
-                    lengthscale=(mean_inner_product)**degree, # for non-unit norm data
+                    lengthscale=1.0, # for non-unit norm data
                     projection_type=config['proj'],
                     complex_weights=config['complex_weights'],
                     complex_real=config['complex_real'],
@@ -194,8 +195,8 @@ if __name__ == '__main__':
                 vgp.cuda()
 
             # lr = 1e-3 if config['proj'].startswith('countsketch') else 1e-2
-            # epochs = args.epochs if config['proj'].startswith('countsketch') else 3*args.epochs
-            epochs = args.epochs
+            epochs = 3 * args.epochs if config['proj'].startswith('srf') else args.epochs
+            # epochs = args.epochs
             vgp.optimize_lower_bound(model_name, dataloaders['train'], dataloaders['test'], num_epochs=epochs,
                                         lr=args.lr, a=0.5, b=10, gamma=1)
 
