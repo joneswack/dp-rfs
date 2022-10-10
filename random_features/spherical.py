@@ -69,6 +69,7 @@ class Spherical(torch.nn.Module):
         self.d_in = d_in
         self.d_features = d_features
         if not complex_weights:
+            # we use sin + cos features
             self.d_features = self.d_features // 2
         self.num_pdf_components = num_pdf_components
         self.epsilon = epsilon

@@ -89,6 +89,7 @@ class VariationalGP(nn.Module):
         if self.feature_encoder is not None:
             x = self.feature_encoder(x)
 
+        x = x / x.norm(dim=-1, keepdim=True)
         x = self.log_feature_scale.exp() * x
 
         mu_output = torch.mm(x, self.q_mu.t())

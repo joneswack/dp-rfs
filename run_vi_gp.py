@@ -77,14 +77,16 @@ if __name__ == '__main__':
     data_name, train_data, test_data, train_labels, test_labels = data
     train_labels[train_labels == -1.] = 0
     test_labels[test_labels == -1.] = 0
-    min_val = torch.min(train_data, 0)[0]
+    min_val = torch.min(train_data)
     train_data = train_data - min_val
     test_data = test_data - min_val
     # normalize data
-    train_data = train_data / torch.max(train_data, 0)[0]
-    test_data = test_data / torch.max(train_data, 0)[0]
+    train_data = train_data / torch.max(train_data)
+    test_data = test_data / torch.max(train_data)
     # train_data = train_data / train_data.norm(dim=1, keepdim=True)
     # test_data = test_data / test_data.norm(dim=1, keepdim=True)
+
+    mean_inner_product = (train_data[:5000] @ train_data[:5000].t()).mean()
 
     # We make the bias trainable...
     train_data = util.data.pad_data_pow_2(train_data)[:, :-1]
@@ -95,11 +97,11 @@ if __name__ == '__main__':
 
     pow_2_shape = int(2**np.ceil(np.log2(train_data.shape[1])))
     # we use D=10d
-    # D = pow_2_shape * 10
-    D = 2**9
+    D = pow_2_shape * 10
+    # D = 2**9
     E = 2**15
     n_classes = train_labels.shape[1]
-    degree = 7
+    degree = 3
     a = 2
     bias = 1.-2./a**2
     lengthscale = a / np.sqrt(2.)
@@ -143,29 +145,30 @@ if __name__ == '__main__':
 
             if config['proj'] == 'srf':
                 up_encoder = Spherical(
-                    train_data.shape[1], E,
+                    train_data.shape[1], E if config['craft'] else D,
                     lengthscale=1.0,
                     var=train_labels.var(),
                     discrete_pdf=False, num_pdf_components=10,
                     complex_weights=config['complex_weights'],
                     projection_type=config['proj'],
                     trainable_kernel=True,
-                    ard=config['ard'],
+                    ard=False,
                     device=('cuda' if args.use_gpu else 'cpu'),
                 )
                 up_encoder.load_model('saved_models/poly_a{}.0_p{}_d{}.torch'.format(a, degree, pow_2_shape))
-                # feature_encoder.log_lengthscale = torch.nn.Parameter(
-                #     torch.ones(feature_encoder.d_in, device=feature_encoder.device) * feature_encoder.log_lengthscale.cpu().item(),
-                #     requires_grad=True
-                # )
+                if config['ard']:
+                    up_encoder.log_lengthscale = torch.nn.Parameter(
+                        torch.ones(up_encoder.d_in, device=up_encoder.device) * up_encoder.log_lengthscale.cpu().item(),
+                        requires_grad=True
+                )
             else:
 
                 up_encoder = PolynomialSketch(
-                    train_data.shape[1], E,
+                    train_data.shape[1], E if config['craft'] else D,
                     degree=degree,
-                    bias=1.0 / np.sqrt(train_data.shape[1]), # for non-unit norm data
-                    var=train_labels.var(),
-                    lengthscale=1.0 / np.sqrt(train_data.shape[1]), # for non-unit norm data
+                    bias=1.0, # for non-unit norm data
+                    var=train_labels.var(), # train_labels.var(),
+                    lengthscale=(mean_inner_product)**degree, # for non-unit norm data
                     projection_type=config['proj'],
                     complex_weights=config['complex_weights'],
                     complex_real=config['complex_real'],
@@ -179,8 +182,6 @@ if __name__ == '__main__':
                 feature_encoder = CRAFTEncoder(up_encoder, E, D, device=up_encoder.device)
             else:
                 feature_encoder = up_encoder
-                # CtR-features double the dimension later on again!
-                feature_encoder.d_features = D // 2 if config['complex_real'] else D
             
             with torch.no_grad():
                 if config['proj'] == 'srf':
