@@ -110,18 +110,18 @@ if __name__ == '__main__':
     print('Comparing approximations...')
 
     configurations = [
-        {'proj': 'srf', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'craft': False, 'ard': True},
+        {'proj': 'srf', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'craft': False, 'ard': False},
         # weights for degrees (1,2,3,4), h01, has_constant
-        {'proj': 'countsketch_scatter', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'craft': False, 'ard': True},
-        {'proj': 'countsketch_scatter', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'craft': True, 'ard': True},
+        {'proj': 'countsketch_scatter', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'craft': False, 'ard': False},
+        {'proj': 'countsketch_scatter', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'craft': True, 'ard': False},
         # {'proj': 'gaussian', 'full_cov': False, 'complex_real': False},
         # {'proj': 'gaussian', 'full_cov': False, 'complex_real': True},
         # {'proj': 'rademacher', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
         # {'proj': 'rademacher', 'full_cov': False, 'complex_weights': False, 'complex_real': True},
-        {'proj': 'srht', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'craft': False, 'ard': True},
-        {'proj': 'srht', 'full_cov': False, 'complex_weights': False, 'complex_real': True, 'craft': False, 'ard': True},
-        {'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': False, 'craft': True, 'ard': True},
-        {'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': True, 'craft': True, 'ard': True}
+        {'proj': 'srht', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'craft': False, 'ard': False},
+        {'proj': 'srht', 'full_cov': False, 'complex_weights': False, 'complex_real': True, 'craft': False, 'ard': False},
+        {'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': False, 'craft': True, 'ard': False},
+        {'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': True, 'craft': True, 'ard': False}
     ]
 
     for seed in range(args.num_seeds):

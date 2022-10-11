@@ -21,7 +21,7 @@ def extract_random_patches(conv_features, num_samples):
 class CNNKernelPooling(nn.Module):
     def __init__(self, model, D=10240, n_classes=10,
                     estimate_lengthscale=True, feature_encoder=None,
-                    sqrt=True, norm=True, finetuning=False):
+                    sqrt=True, norm=True, finetuning=False, device='cpu'):
         """
         estimate_lengthscale: whether to estimate the lengthscale on a data subsample
         """
@@ -31,22 +31,21 @@ class CNNKernelPooling(nn.Module):
         self.sqrt = sqrt
         self.norm = norm
         self.finetuning = finetuning
+        self.D = D
 
         # last conv activation (drop last MaxPool2d)
         # self.features = model.features[:-1]
-        self.features = torch.nn.Sequential(*list(model.features.children())[:-2])
+        self.features = torch.nn.Sequential(*list(model.features.children())[:-2]).to(device)
 
-        self.relu5_3 = torch.nn.ReLU(inplace=False)
+        self.relu5_3 = torch.nn.ReLU(inplace=False).to(device)
 
-        if feature_encoder is None:
-            raise RuntimeError('Please define a feature encoder!')
         self.pool_sketch = feature_encoder
 
-        self.classifier = nn.Linear(D, n_classes) # 512
+        self.classifier = nn.Linear(D, n_classes).to(device) # 512
         # self.classifier = torch.nn.Linear(in_features=512 * 512, out_features=n_classes, bias=True)
 
         # may not be necessary!
-        torch.nn.init.constant_(self.classifier.bias, val=0.0)
+        torch.nn.init.constant_(self.classifier.bias, val=0.0).to(device)
 
     def estimate_lengthscale_and_features(self, random_patches):
         """
@@ -68,23 +67,23 @@ class CNNKernelPooling(nn.Module):
 
         return x
     
-    def forward(self, x):
+    def forward(self, x, finetuning=False):
         # https://github.com/HaoMood/blinear-cnn-faster/blob/master/src/model.py
         # for orientation
         bs = len(x)
 
-        if self.finetuning:
+        if finetuning:
             x = self.extract_pool_features(x)
 
         # we drop the last channel for srht
-        if self.feature_encoder.projection_type == 'srht' and self.feature_encoder.bias != 0:
+        # if self.pool_sketch.projection_type == 'srht' and self.pool_sketch.log_bias is not None:
             # x = x[:, :-1, :, :]
-            x = self.relu5_3(x[:, :-1, :, :])
-        else:
+            # x = self.relu5_3(x[:, :-1, :, :])
+        # else:
             # pass
             # x = self.relu5_3(x)
             # for fairness, we provide the same data as for srht
-            x = self.relu5_3(x[:, :-1, :, :])
+        x = self.relu5_3(x[:, :-1, :, :])
 
         # x = torch.reshape(x, (bs, 512, 28 * 28))
 
@@ -96,18 +95,21 @@ class CNNKernelPooling(nn.Module):
 
         # move channels to the back
         x = x.permute(0, 2, 3, 1)
+        # print(x.shape)
         # treat conv output as huge mini batch
         x = x.reshape(-1, x.shape[-1])
         # construct sketch vector (H01)
         # x = torch.cat([x, self.pool_sketch(x)], dim=-1)
         # only required, if model has own lengthscale parameter (already done for feature encoder)
         # x = x / self.log_lengthscale.exp()
+        # print(x.shape)
 
         x = self.pool_sketch(x)
+        # print(x.shape)
         # print('Poolsketch time: {}'.format(time.time() - tic))
         
         # reshape minibatch to (bs x patches x D)
-        x = x.view(bs, -1, *x.shape[1:])
+        x = x.view(bs, -1, self.D)
         # average pooling over patches (can be interchanged with coefficient mult.)
         x = x.mean(dim=1)
 
@@ -119,6 +121,7 @@ class CNNKernelPooling(nn.Module):
         if self.norm:
             x = x / x.norm(dim=-1, keepdim=True)
         # we apply the classifier
-        x = self.classifier(x)
+        # print(x.shape)
+        # x = self.classifier(x)
 
         return x

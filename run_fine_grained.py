@@ -37,7 +37,7 @@ def parse_args():
                             help='Number of epochs for finetuning')
     parser.add_argument('--pretrain_epochs', type=int, required=False, default=50,
                             help='Number of epochs for classifier pretraining')
-    parser.add_argument('--pretrain_lr', type=float, required=False, default=0.01,
+    parser.add_argument('--pretrain_lr', type=float, required=False, default=0.001,
                             help='Learning rate for classifier pretraining')
     parser.add_argument('--num_samples', type=int, required=False, default=1000,
                             help='Number of samples for lengthscale, feature estimation')
@@ -104,18 +104,18 @@ class CRAFTEncoder(torch.nn.Module):
 
 if __name__ == '__main__':
     configurations = [
-        {'proj': 'srf', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'craft': False},
         # weights for degrees (1,2,3,4), h01, has_constant
-        {'proj': 'countsketch_scatter', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'craft': False},
-        # {'proj': 'countsketch_scatter', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'craft': True, 'ard': True},
         # {'proj': 'gaussian', 'full_cov': False, 'complex_real': False},
         # {'proj': 'gaussian', 'full_cov': False, 'complex_real': True},
         # {'proj': 'rademacher', 'full_cov': False, 'complex_weights': False, 'complex_real': False},
         # {'proj': 'rademacher', 'full_cov': False, 'complex_weights': False, 'complex_real': True},
+        # {'proj': 'countsketch_scatter', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'craft': True},
+        # {'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': False, 'craft': True},
+        # {'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': True, 'craft': True},
+        {'proj': 'srf', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'craft': False},
         {'proj': 'srht', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'craft': False},
         {'proj': 'srht', 'full_cov': False, 'complex_weights': False, 'complex_real': True, 'craft': False},
-        # {'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': False, 'craft': True, 'ard': True},
-        # {'proj': 'srht', 'full_cov': True, 'complex_weights': False, 'complex_real': True, 'craft': True, 'ard': True}
+        {'proj': 'countsketch_scatter', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'craft': False}
     ]
 
     args = parse_args()
@@ -168,10 +168,13 @@ if __name__ == '__main__':
         model = CNNKernelPooling(models.vgg16(
             pretrained=True), D=10240, n_classes=200,
             estimate_lengthscale=False, feature_encoder=None,
-            sqrt=True, norm=True, finetuning=False
+            sqrt=True, norm=True, finetuning=False, device=('cuda' if args.use_gpu else 'cpu')
         )
 
-        outputs = {'train': [[], []], 'test': [[], []]}
+        outputs = {
+            'train': [torch.zeros(dataset_sizes['train'], 512, 28, 28), []],
+            'test': [torch.zeros(dataset_sizes['test'], 512, 28, 28), []]
+        }
         
         for phase in ['train', 'test']:
             print('Extracting {} features...'.format(phase))
@@ -181,13 +184,15 @@ if __name__ == '__main__':
                     inputs = inputs.cuda()
                     labels = labels.cuda()
                 with torch.no_grad():
-                    outputs[phase][0].append(model.extract_pool_features(inputs).cpu())
+                    # outputs[phase][0].append(model.extract_pool_features(inputs).cpu())
+                    outputs[phase][0][i*args.bs:(i+1)*args.bs] = model.extract_pool_features(inputs).cpu()
                     outputs[phase][1].append(labels.cpu())
 
-            outputs[phase][0] = torch.cat(outputs[phase][0], dim=0)
+            # outputs[phase][0] = torch.cat(outputs[phase][0], dim=0)
             outputs[phase][1] = torch.cat(outputs[phase][1], dim=0)
 
         torch.save(outputs, conv_feature_path)
+        del outputs
         # save random projection from poolsketch
         # torch.save(
         #     model.pool_sketch.cpu().state_dict(),
@@ -200,13 +205,16 @@ if __name__ == '__main__':
 
     E = 2**15
     p=3
+    a = 2
+    bias = 1.-2./a**2
+    lengthscale = a / np.sqrt(2.)
 
-    for config in configurations:
-        for D in [2**i for i in range(8,14)]:
-            for seed in range(1):
+    for seed in range(10):
+        for D in [2**13]:
+            for config in configurations:
                 save_name = os.path.join(
                     args.model_name,
-                    'proj_{}_deg_{}_compreal_{}_craft_{}_ard_{}'.format(
+                    'proj_{}_deg_{}_compreal_{}_craft_{}_ard_{}_3'.format(
                         config['proj'], p, config['complex_real'], config['craft'], args.ard),
                     str(seed)
                 )
@@ -224,11 +232,11 @@ if __name__ == '__main__':
                         discrete_pdf=False, num_pdf_components=10,
                         complex_weights=config['complex_weights'],
                         projection_type=config['proj'],
-                        trainable_kernel=args.ard,
+                        trainable_kernel=False,
                         ard=False,
                         device=('cuda' if args.use_gpu else 'cpu'),
                     )
-                    up_encoder.load_model('saved_models/poly_a{}.0_p{}_d{}.torch'.format(2, 3, 512))
+                    up_encoder.load_model('saved_models/poly_a{}.0_p{}_d{}.torch'.format(a, p, 512))
                     if args.ard:
                         up_encoder.log_lengthscale = torch.nn.Parameter(
                             torch.ones(up_encoder.d_in, device=up_encoder.device) * up_encoder.log_lengthscale.cpu().item(),
@@ -238,15 +246,15 @@ if __name__ == '__main__':
 
                     up_encoder = PolynomialSketch(
                         511, E if config['craft'] else D,
-                        degree=3,
-                        bias=1.0, # for non-unit norm data
+                        degree=p,
+                        bias=bias, # for non-unit norm data
                         var=1.0, # train_labels.var(),
-                        lengthscale=1.0, # for non-unit norm data
+                        lengthscale=lengthscale, # for non-unit norm data
                         projection_type=config['proj'],
                         complex_weights=config['complex_weights'],
                         complex_real=config['complex_real'],
                         full_cov=config['full_cov'],
-                        trainable_kernel=args.ard,
+                        trainable_kernel=False,
                         ard=args.ard,
                         device=('cuda' if args.use_gpu else 'cpu')
                     )
@@ -266,7 +274,7 @@ if __name__ == '__main__':
 
                 model = CNNKernelPooling(models.vgg16(
                     pretrained=True), D=D, n_classes=200,
-                    estimate_lengthscale=False, feature_encoder=None,
+                    estimate_lengthscale=False, feature_encoder=feature_encoder,
                     sqrt=True, norm=True, finetuning=False
                 )
 
@@ -288,222 +296,175 @@ if __name__ == '__main__':
                     classifier.cuda()
                     criterion.cuda()
 
+                clf_dataloaders = {
+                    x: torch.utils.data.DataLoader(
+                            torch.utils.data.TensorDataset(*precomputed_features[x]),
+                            batch_size=args.bs,
+                            shuffle=True, num_workers=0
+                    ) for x in ['train', 'test']}
 
-                ###### Closed form solution
-                # train_labels = precomputed_features['train'][1].view(-1).type(torch.LongTensor)
-                # test_labels = precomputed_features['test'][1].view(-1).type(torch.LongTensor)
-                # train_labels = torch.nn.functional.one_hot(train_labels).type(torch.FloatTensor)
-                # test_labels = torch.nn.functional.one_hot(test_labels).type(torch.FloatTensor)
-                    
-                # # transform 0 into -1
-                # train_labels[train_labels == 0] = -1
-                # test_labels[test_labels == 0] = -1
+                # # Observe that all parameters are being optimized
+                # fine-tuning starts with lr=0.001
+                # pre_optimizer = optim.SGD(model.parameters(), lr=1.0, momentum=0.9, weight_decay=1e-5) # 0.1
+                # pre_optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=1e-5)
+                pre_optimizer = optim.Adam(classifier.parameters(), lr=args.pretrain_lr, weight_decay=1e-5) # , weight_decay=1e-5
+                # pre_optimizer = optim.SGD(model.parameters(), lr=1.0, momentum=0.9, weight_decay=1e-5)
+                # we use 0.01 instead of 0.001 because normalization is different
+                # fine_optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=1e-5)
+                fine_optimizer = optim.Adam(model.parameters(), lr=0.1 * args.pretrain_lr, weight_decay=1e-5)
+                # fine_optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9, weight_decay=1e-5)
 
-                # # get the projections
-                # # train
-                # # model.log_lengthscale.data = torch.ones_like(model.log_lengthscale.data) * log_lengthscale
-                # # print('Log-Lengthscale: {}'.format(log_lengthscale))
-                # with torch.no_grad():
-                #     train_features = []
-                #     test_features = []
-                #     for x, y in torch.utils.data.TensorDataset(*precomputed_features['train']):
-                #         x = x.unsqueeze(0)
-                #         if args.use_gpu:
-                #             proj = model.forward(x.cuda(), finetuning=False)
-                #         else:
-                #             proj = model.forward(x, finetuning=False)
-                #         train_features.append(proj)
-                #     for x, y in torch.utils.data.TensorDataset(*precomputed_features['test']):
-                #         x = x.unsqueeze(0)
-                #         if args.use_gpu:
-                #             proj = model.forward(x.cuda(), finetuning=False)
-                #         else:
-                #             proj = model.forward(x, finetuning=False)
-                #         test_features.append(proj)
+                # # Decay LR by a factor of 0.1 every 7 epochs
+                # scheduler = lr_scheduler.MultiStepLR(
+                #     fine_optimizer,
+                #     # we divide the learning rate by 10 after the pretraining and after every 30 epochs thereafter
+                #     [i*30 for i in range(1, 10)], # [args.pretrain_epochs] + args.pretrain_epochs+
+                #     gamma=0.1, last_epoch=-1)
+                # scheduler = lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
+                pre_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                    pre_optimizer, mode='min', factor=0.1, patience=8, verbose=True, threshold=1e-4)
+                fine_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                    fine_optimizer, mode='min', factor=0.1, patience=8, verbose=True, threshold=1e-4)
 
-                #     train_features = torch.cat(train_features, dim=0)
-                #     test_features = torch.cat(test_features, dim=0)
+                # # Train the model
+                total_time = 0
 
-                #     if args.use_gpu:
-                #         train_labels = train_labels.cuda()
-                #         test_labels = test_labels.cuda()
+                best_acc = 0.0
+                
+                history = {'epoch' : [], 'train_loss' : [], 'test_loss' : [], 'train_acc' : [], 'test_acc' : [], 'train_time': []}
 
-                #     for wd in [10**i for i in range(-6, 2)]:
-                #         try:
-                #             accuracy, _ = solve_linear_regression(
-                #                 train_features, test_features, train_labels, test_labels,
-                #                 penalty=wd, complex_weights=config['comp'])
-                #             # print('Weight decay: {}, Accuracy: {}'.format(wd, accuracy))
-                #         except Exception as e:
-                #             log_handler.append('Weight decay: {}: Oops! Exception occured! {}'.format(wd, e.__class__))
-                #             log_handler.append('NaN? {}'.format(train_features.norm().item()))
-                #             # evs, _ = torch.eig(train_features.t() @ train_features, eigenvectors=False)
-                #             # log_handler.append('Min ev: {}, Max ev: {}'.format(evs[:, 0].min().item(), evs[:, 0].max().item()))
-                #             accuracy = 0
+                total_epochs = args.pretrain_epochs + args.finetune_epochs
+                total_epochs = total_epochs * 2 if config['proj'] == 'srf' else total_epochs
+                for epoch in range(total_epochs):
+                    epoch_time = 0
+                    print('Epoch {}/{}'.format(epoch + 1, total_epochs))
+                    print('-' * 10)
 
-                #         config['weight_decay'] = wd
-                #         config['D'] = D
-                #         config['reg_acc'] = accuracy
-                #         config['seed'] = seed
-                #         log_handler.append(str(config))
-                #         csv_handler.append(config)
-                #         csv_handler.save()
-
-    # exit()
-
-    clf_dataloaders = {
-        x: torch.utils.data.DataLoader(
-                torch.utils.data.TensorDataset(*precomputed_features[x]),
-                batch_size=args.bs,
-                shuffle=True, num_workers=0
-        ) for x in ['train', 'test']}
-
-    # # Observe that all parameters are being optimized
-    # fine-tuning starts with lr=0.001
-    # pre_optimizer = optim.SGD(model.parameters(), lr=1.0, momentum=0.9, weight_decay=1e-5) # 0.1
-    # pre_optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=1e-5)
-    pre_optimizer = optim.Adam(classifier.parameters(), lr=args.pretrain_lr, weight_decay=1e-5) # , weight_decay=1e-5
-    # pre_optimizer = optim.SGD(model.parameters(), lr=1.0, momentum=0.9, weight_decay=1e-5)
-    # we use 0.01 instead of 0.001 because normalization is different
-    # fine_optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=1e-5)
-    fine_optimizer = optim.Adam(model.parameters(), lr=0.1 * args.pretrain_lr, weight_decay=1e-5)
-    # fine_optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9, weight_decay=1e-5)
-
-    # # Decay LR by a factor of 0.1 every 7 epochs
-    # scheduler = lr_scheduler.MultiStepLR(
-    #     fine_optimizer,
-    #     # we divide the learning rate by 10 after the pretraining and after every 30 epochs thereafter
-    #     [i*30 for i in range(1, 10)], # [args.pretrain_epochs] + args.pretrain_epochs+
-    #     gamma=0.1, last_epoch=-1)
-    # scheduler = lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
-    pre_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        pre_optimizer, mode='min', factor=0.1, patience=8, verbose=True, threshold=1e-4)
-    fine_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        fine_optimizer, mode='min', factor=0.1, patience=8, verbose=True, threshold=1e-4)
-
-    # # Train the model
-    since = time.time()
-
-    best_acc = 0.0
-    
-    history = {'epoch' : [], 'train_loss' : [], 'test_loss' : [], 'train_acc' : [], 'test_acc' : []}
-
-    total_epochs = args.pretrain_epochs + args.finetune_epochs
-    for epoch in range(total_epochs):
-        print('Epoch {}/{}'.format(epoch + 1, total_epochs))
-        print('-' * 10)
-        epoch_time = time.time()
-
-        if (epoch + 1 > args.pretrain_epochs):
-            finetuning = True
-            optimizer = fine_optimizer
-            if model.pool_sketch.log_bias is not None:
-                model.pool_sketch.log_bias.requires_grad = False
-            model.pool_sketch.log_lengthscale.requires_grad = False
-            print('Phase: Finetuning')
-        else:
-            finetuning = False
-            optimizer = pre_optimizer
-            if model.pool_sketch.log_bias is not None:
-                model.pool_sketch.log_bias.requires_grad = args.ard
-            model.pool_sketch.log_lengthscale.requires_grad = args.ard
-            print('Phase: Pretraining')
-
-        print('LR: {}'.format(optimizer.param_groups[0]["lr"]))
-
-        # Each epoch has a training and validation phase
-        for phase in ['train', 'test']:
-            if phase == 'train':
-                model.train()  # Set model to training mode
-            else:
-                model.eval()   # Set model to evaluate mode
-
-            epoch_losses = []
-            num_correct = 0
-            num_total = 0
-
-            # Iterate over data.
-            dl = ft_dataloaders[phase] if finetuning else clf_dataloaders[phase]
-            for inputs, labels in dl:
-                if args.use_gpu:
-                    inputs = inputs.cuda()
-                    labels = labels.cuda()
-
-                # forward
-                # track history if only in train
-                with torch.set_grad_enabled(phase == 'train'):
-                    # tic = time.time()
-                    outputs = model.forward(inputs, finetuning=finetuning)
-                    outputs = classifier.forward(outputs)
-                    # print('Forward time: {}'.format(time.time() - tic))
-                    if phase == 'test' and finetuning:
-                        # TTA
-                        # flip along width of [batch_size, channels, height, width]
-                        # TODO: is it better to place TTA after the softmax?
-                        # averaging RELATIVE confidence might be better than ABSOLUTE confidence
-                        outputs2 = torch.flip(inputs, [3])
-                        outputs2 = model.forward(outputs2, finetuning=finetuning)
-                        outputs2 = classifier.forward(outputs2)
-                        outputs = (
-                            torch.nn.functional.softmax(outputs, dim=1) + \
-                            torch.nn.functional.softmax(outputs2, dim=1)
-                        ) / 2.
-                        loss = torch.nn.functional.nll_loss(torch.log(outputs), labels)
-                        # outputs = (outputs + outputs2) / 2.
+                    if (epoch + 1 > args.pretrain_epochs):
+                        finetuning = True
+                        optimizer = fine_optimizer
+                        # if config['proj'] != 'srf' and not config['craft'] and model.pool_sketch.log_bias is not None:
+                            # model.pool_sketch.log_bias.requires_grad = False
+                        # model.pool_sketch.log_lengthscale.requires_grad = False
+                        print('Phase: Finetuning')
                     else:
-                        loss = criterion(outputs, labels)
-                    epoch_losses.append(loss.item())
-                    preds = torch.argmax(outputs, dim=1)
+                        finetuning = False
+                        optimizer = pre_optimizer
+                        # if config['proj'] != 'srf' and not config['craft'] and model.pool_sketch.log_bias is not None:
+                            # model.pool_sketch.log_bias.requires_grad = args.ard
+                        # model.pool_sketch.log_lengthscale.requires_grad = args.ard
+                        print('Phase: Pretraining')
 
-                    # backward + optimize only if in training phase
-                    if phase == 'train':
-                        # zero the parameter gradients
-                        optimizer.zero_grad()
-                        # tic = time.time()
-                        loss.backward()
-                        # print('Backward time: {}'.format(time.time() - tic))
-                        # torch.nn.utils.clip_grad_value_(model.parameters(), 1)
-                        optimizer.step()
+                    print('LR: {}'.format(optimizer.param_groups[0]["lr"]))
 
-                # statistics
-                num_total += labels.size(0)
-                num_correct += torch.sum(preds == labels).item()
+                    # Each epoch has a training and validation phase
+                    for phase in ['train', 'test']:
+                        if phase == 'train':
+                            model.train()  # Set model to training mode
+                        else:
+                            model.eval()   # Set model to evaluate mode
 
-            epoch_loss = sum(epoch_losses) / len(epoch_losses)
-            epoch_acc = num_correct / num_total
+                        epoch_losses = []
+                        num_correct = 0
+                        num_total = 0
 
-            if phase == 'train':
-                pre_scheduler.step(epoch_loss)
-                if finetuning:
-                    fine_scheduler.step(epoch_loss)
-            
-            history['epoch'].append(epoch)
-            history[phase+'_loss'].append(epoch_loss)
-            history[phase+'_acc'].append(epoch_acc)
+                        # Iterate over data.
+                        dl = ft_dataloaders[phase] if finetuning else clf_dataloaders[phase]
+                        for inputs, labels in dl:
+                            if args.use_gpu:
+                                inputs = inputs.cuda()
+                                labels = labels.cuda()
 
-            print('{} Loss: {:.4f} Acc: {:.4f}'.format(
-                phase, epoch_loss, epoch_acc))
+                            # forward
+                            # track history if only in train
+                            with torch.set_grad_enabled(phase == 'train'):
+                                if phase == 'train':
+                                    if args.use_gpu:
+                                        torch.cuda.empty_cache()
+                                        torch.cuda.synchronize()
+                                    batch_time = time.time()
 
-            # deep copy the model
-            if phase == 'test' and epoch_acc > best_acc:
-                best_acc = epoch_acc
-                torch.save(model.state_dict(), 'saved_models/{}.pth'.format(args.model_name))
-                # best_model_wts = copy.deepcopy(model.state_dict())
+                                # tic = time.time()
+                                outputs = model.forward(inputs, finetuning=finetuning)
+                                outputs = classifier.forward(outputs)
+                                # print('Forward time: {}'.format(time.time() - tic))
+                                if phase == 'test' and finetuning:
+                                    # TTA
+                                    # flip along width of [batch_size, channels, height, width]
+                                    # TODO: is it better to place TTA after the softmax?
+                                    # averaging RELATIVE confidence might be better than ABSOLUTE confidence
+                                    outputs2 = torch.flip(inputs, [3])
+                                    outputs2 = model.forward(outputs2, finetuning=finetuning)
+                                    outputs2 = classifier.forward(outputs2)
+                                    outputs = (
+                                        torch.nn.functional.softmax(outputs, dim=1) + \
+                                        torch.nn.functional.softmax(outputs2, dim=1)
+                                    ) / 2.
+                                    loss = torch.nn.functional.nll_loss(torch.log(outputs), labels)
+                                    # outputs = (outputs + outputs2) / 2.
+                                else:
+                                    loss = criterion(outputs, labels)
+                                epoch_losses.append(loss.item())
+                                preds = torch.argmax(outputs, dim=1)
 
-        
-        print('Epoch time: {:2f}'.format(time.time() - epoch_time))
+                                # backward + optimize only if in training phase
+                                if phase == 'train':
+                                    # zero the parameter gradients
+                                    optimizer.zero_grad()
+                                    # tic = time.time()
+                                    loss.backward()
+                                    # print('Backward time: {}'.format(time.time() - tic))
+                                    # torch.nn.utils.clip_grad_value_(model.parameters(), 1)
+                                    optimizer.step()
 
-        with open('logs/kernel_pooling/{}.pkl'.format(save_name),'wb') as f:
-            pickle.dump(history, f)
+                                    if args.use_gpu:
+                                        torch.cuda.synchronize()
+                                    epoch_time += time.time() - batch_time
+                                    total_time += time.time() - batch_time
 
-    time_elapsed = time.time() - since
-    print('Training complete in {:.0f}m {:.0f}s'.format(
-        time_elapsed // 60, time_elapsed % 60))
-    print('Best val Acc: {:4f}'.format(best_acc))
+                            # statistics
+                            num_total += labels.size(0)
+                            num_correct += torch.sum(preds == labels).item()
 
-    # # load best model weights
-    # print('Returning object of best model.')
-    # model.load_state_dict(best_model_wts)
+                        epoch_loss = sum(epoch_losses) / len(epoch_losses)
+                        epoch_acc = num_correct / num_total
 
-    # # TODO: pickle best model
-    # torch.save(model.state_dict(), 'saved_models/{}.pth'.format(args.model_name))
+                        if phase == 'train':
+                            # pre_scheduler.step(epoch_loss)
+                            if finetuning:
+                                fine_scheduler.step(epoch_loss)
+                            history['train_time'].append(total_time)
+                        
+                        history['epoch'].append(epoch)
+                        history[phase+'_loss'].append(epoch_loss)
+                        history[phase+'_acc'].append(epoch_acc)
+
+                        print('{} Loss: {:.4f} Acc: {:.4f}'.format(
+                            phase, epoch_loss, epoch_acc))
+
+                        # deep copy the model
+                        if phase == 'test' and epoch_acc > best_acc:
+                            best_acc = epoch_acc
+                            torch.save(model.state_dict(), 'saved_models/{}.pth'.format(args.model_name))
+                            # best_model_wts = copy.deepcopy(model.state_dict())
+
+                    
+                    print('Epoch time: {:2f}'.format(epoch_time))
+
+                    save_folder = os.path.join('logs/kernel_pooling', "/".join(save_name.split("/")[:-1]))
+                    if not os.path.exists(save_folder):
+                        os.makedirs(save_folder)
+                    with open('logs/kernel_pooling/{}.pkl'.format(save_name),'wb') as f:
+                        pickle.dump(history, f)
+
+                time_elapsed = total_time
+                print('Training complete in {:.0f}m {:.0f}s'.format(
+                    time_elapsed // 60, time_elapsed % 60))
+                print('Best val Acc: {:4f}'.format(best_acc))
+
+                # # load best model weights
+                # print('Returning object of best model.')
+                # model.load_state_dict(best_model_wts)
+
+                # # TODO: pickle best model
+                # torch.save(model.state_dict(), 'saved_models/{}.pth'.format(args.model_name))
