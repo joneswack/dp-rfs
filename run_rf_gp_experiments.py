@@ -26,13 +26,13 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--rf_parameter_file', type=str, required=False, default='config/rf_parameters/poly3_ctr.json',
                         help='Path to RF parameter file')
-    parser.add_argument('--datasets_file', type=str, required=False, default='config/active_datasets2.json',
+    parser.add_argument('--datasets_file', type=str, required=False, default='config/active_datasets3.json',
                         help='List of datasets to be used for the experiments')
     parser.add_argument('--num_data_samples', type=int, required=False, default=5000,
                         help='Number of data samples for lengthscale estimation')
     parser.add_argument('--num_mc_samples', type=int, required=False, default=1000,
                         help='Number of mc samples for predictive distribution')
-    parser.add_argument('--num_seeds', type=int, required=False, default=10,
+    parser.add_argument('--num_seeds', type=int, required=False, default=50,
                         help='Number of seeds (runs)')
     parser.add_argument('--use_gpu', dest='use_gpu', action='store_true')
     parser.set_defaults(use_gpu=False)

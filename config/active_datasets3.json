@@ -2,6 +2,7 @@
     "regression": [
     ],
     "classification": [
-        "config/datasets/mnist.json"
+        "config/datasets/letter.json",
+        "config/datasets/mocap.json"
     ]
 }
