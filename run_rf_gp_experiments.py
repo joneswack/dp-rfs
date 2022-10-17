@@ -32,7 +32,7 @@ def parse_args():
                         help='Number of data samples for lengthscale estimation')
     parser.add_argument('--num_mc_samples', type=int, required=False, default=1000,
                         help='Number of mc samples for predictive distribution')
-    parser.add_argument('--num_seeds', type=int, required=False, default=50,
+    parser.add_argument('--num_seeds', type=int, required=False, default=20,
                         help='Number of seeds (runs)')
     parser.add_argument('--use_gpu', dest='use_gpu', action='store_true')
     parser.set_defaults(use_gpu=False)
@@ -88,13 +88,13 @@ def prepare_data(config, args, rf_parameters, data_name, current_train, current_
         kernel_fun = lambda x, y: kernel_var * gaussian_kernel(
             x, y, lengthscale=lengthscale)
     else:
-        if data_name not in ['MNIST']:
-            # we skip zero centering for mnist for the polynomial kernel
-            # current_train, current_test = util.data.standardize_data(current_train, current_test)
-            pass
-        min_val = torch.min(current_train, 0)[0]
-        current_train = current_train - min_val
-        current_test = current_test - min_val
+        # if data_name not in ['MNIST']:
+        # zero-centering
+        current_train, current_test = util.data.standardize_data(current_train, current_test)
+
+        # min_val = torch.min(current_train, 0)[0]
+        # current_train = current_train - min_val
+        # current_test = current_test - min_val
         # unit normalization
         current_train = current_train / current_train.norm(dim=1, keepdim=True)
         current_test = current_test / current_test.norm(dim=1, keepdim=True)

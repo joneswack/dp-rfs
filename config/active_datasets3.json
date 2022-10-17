@@ -3,6 +3,8 @@
     ],
     "classification": [
         "config/datasets/letter.json",
-        "config/datasets/mocap.json"
+        "config/datasets/mocap.json",
+        "config/datasets/mnist.json",
+        "config/datasets/cifar10_conv.json"
     ]
 }
