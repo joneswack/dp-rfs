@@ -15,11 +15,11 @@ def gaussian_kernel_coefs(n):
 
 mc_samples = 1000
 
-#a = 2.
-#bias = 1.-2./a**2
-#lengthscale = a / np.sqrt(2.)
-lengthscale = 1.
-bias = 1.
+a = 2.
+bias = 1.-2./a**2
+lengthscale = a / np.sqrt(2.)
+# lengthscale = 1.
+# bias = 1.
 
 if __name__ == "__main__":
 
@@ -36,8 +36,8 @@ if __name__ == "__main__":
         # ('Covertype', '../datasets/export/covtype/pytorch/covtype.pth'),
         (
             'CIFAR10 Conv',
-            '../datasets/export/cifar10/pytorch/train_cifar10_resnet34_final.pth',
-            '../datasets/export/cifar10/pytorch/test_cifar10_resnet34_final.pth'
+            '../datasets/export/cifar10/pytorch/resnet34_final_conv_train.pth',
+            '../datasets/export/cifar10/pytorch/resnet34_final_conv_test.pth'
         ),
         ('MNIST', '../datasets/export/mnist/pytorch/train_mnist.pth'),
         # ('CIFAR10 Conv', '../datasets/export/conv_features/cifar10-train-inc-v3-2048.pth')
@@ -55,18 +55,20 @@ if __name__ == "__main__":
         train_data = train_data.reshape(len(train_data), -1)
         # test_data = test_data.reshape(len(test_data), -1)
 
-        # train_data = train_data - train_data.mean(dim=0)
+        train_data = train_data - train_data.mean(dim=0)
 
         torch.manual_seed(0) # 42
         np.random.seed(0) # 42
 
         # if dataset[0] == 'MNIST':
         # min/max-scaling
+
         # subtract min val per feature
-        min_val = torch.min(train_data, 0)[0]
-        val_range = torch.max(train_data, 0)[0] - min_val
-        val_range[val_range == 0] = 1
-        train_data = (train_data - min_val) #/ val_range
+        # min_val = torch.min(train_data, 0)[0]
+        # val_range = torch.max(train_data, 0)[0] - min_val
+        # val_range[val_range == 0] = 1
+        # train_data = (train_data - min_val) #/ val_range
+        
         #test_data = (test_data - min_val) #/ val_range
 
         indices = torch.randint(len(train_data), (1000,))
@@ -124,27 +126,25 @@ if __name__ == "__main__":
                 projection_type='countsketch_sparse',
                 hierarchical=False,
                 complex_weights=False,
-                full_cov=False,
-                convolute_ts=True,
-                block_size=None
+                full_cov=False
             )
 
-            squared_errors = torch.zeros_like(ref_kernel)
+            # squared_errors = torch.zeros_like(ref_kernel)
             
-            for i in range(mc_samples):
-                if i % 100 == 0:
-                    print('Sample {} / {}'.format(i+1, mc_samples))
-                torch.manual_seed(i)
-                np.random.seed(i)
+            # for i in range(mc_samples):
+            #     if i % 100 == 0:
+            #         print('Sample {} / {}'.format(i+1, mc_samples))
+            #     torch.manual_seed(i)
+            #     np.random.seed(i)
 
-                ts.resample()
-                y = ts.forward(placeholder)
-                # y = torch.cat([y.real, y.imag], dim=1)
-                approx_kernel = y @ y.t()
-                # approx_kernel *= squared_prefactor.sqrt() * np.sqrt(squared_maclaurin_coefs[degree-1])
-                squared_errors += (approx_kernel - ref_kernel).pow(2)
+            #     ts.resample()
+            #     y = ts.forward(placeholder)
+            #     # y = torch.cat([y.real, y.imag], dim=1)
+            #     approx_kernel = y @ y.t()
+            #     # approx_kernel *= squared_prefactor.sqrt() * np.sqrt(squared_maclaurin_coefs[degree-1])
+            #     squared_errors += (approx_kernel - ref_kernel).pow(2)
 
-            squared_errors /= mc_samples
+            # squared_errors /= mc_samples
 
             # ts_vars.append(squared_errors.mean())
 
@@ -152,23 +152,23 @@ if __name__ == "__main__":
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # gaussian_vars.append(degree_var.view(-1).numpy().mean())
 
-            # degree_var1 = var_rademacher_real(train_data, p=degree, D=D) # degree_var
+            degree_var1 = var_rademacher_real(train_data, p=degree, D=D) # degree_var
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
-            # rad_vars.append(degree_var.view(-1).numpy().mean())
+            # rad_vars.append(degree_var1.view(-1).numpy().mean())
 
-            # degree_var2 = var_rademacher_comp_real(train_data, p=degree, D=D//2.)
+            degree_var2 = var_rademacher_comp_real(train_data, p=degree, D=D//2.)
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
-            # comp_rad_vars.append(degree_var.view(-1).numpy().mean())
+            # comp_rad_vars.append(degree_var2.view(-1).numpy().mean())
 
             # degree_var1, _ = var_tensor_srht_real(placeholder, p=degree, D=D, full_cov=True)
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # srht_vars.append(degree_var.view(-1).numpy().mean())
 
-            degree_var2, _ = var_tensor_srht_comp_real(placeholder, p=degree, D=D//2., full_cov=True)
+            # degree_var2, _ = var_tensor_srht_comp_real(placeholder, p=degree, D=D//2., full_cov=True)
             # degree_var *= squared_prefactor * squared_maclaurin_coefs[degree-1]
             # comp_srht_vars.append(degree_var.view(-1).numpy().mean())
 
-            differences = degree_var2 / squared_errors # squared_errors
+            differences = degree_var2 / degree_var1 # squared_errors
             differences = differences[~(differences.isnan() | differences.isinf())]
             differences = differences.view(-1).sort(descending=False)[0]
 
@@ -178,5 +178,5 @@ if __name__ == "__main__":
 
         results.append((dataset, power_2_pad, dataset_results))
     
-    with open('saved_models/ecdf_plots/tensorsrht_ctr_tensorsketch_r_norm.pkl', 'wb') as handle:
+    with open('saved_models/ecdf_plots/rademacher_ctr_r_norm_zero.pkl', 'wb') as handle:
         pickle.dump(results, handle)
