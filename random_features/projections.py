@@ -6,7 +6,7 @@ import time
 
 from torch._C import device
 
-from util.hadamard_cuda.fwht import FastWalshHadamardTransform
+# from util.hadamard_cuda.fwht import FastWalshHadamardTransform
 
 
 def generate_rademacher_samples(shape, complex_weights=False, device='cpu'):
