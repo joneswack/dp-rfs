@@ -138,13 +138,80 @@ def construct_sketch_tree(node_projection, leaf_projection, degree, d_in, d_feat
     return current_layer[0]
 
 
+class AhleEtAl(torch.nn.Module):
+    """
+    Ahle et al.'s implementation
+    """
+
+    def __init__(self, projection, degree, d_in, d_features, tree=False, srht=False):
+        super(AhleEtAl, self).__init__()
+        
+        # in the case of srht, we need to project to the power of 2
+        # because the output sketch becomes an input sketch
+        proj_dim = int(2**np.ceil(np.log2(d_features))) if srht else d_features
+        
+        self.base_projections = torch.nn.ModuleList(
+            [projection(d_in, proj_dim) for _ in range(degree)]
+        )
+        
+        self.node_projections = torch.nn.ModuleList(
+            [projection(proj_dim, proj_dim) for _ in range(2*degree)]
+        )
+        
+        self.degree = degree
+        self.tree = tree
+        self.srht = srht
+        self.d_features = d_features
+        
+    def resample(self):
+        for node in self.base_projections:
+            node.resample()
+        for node in self.node_projections:
+            node.resample()
+            
+    def forward(self, x):
+        bases = [proj.forward(x) for proj in self.base_projections]
+        for base in bases:
+            # for srht, we pad the output with zeros
+            base[:, self.d_features:] = 0
+        
+        if self.tree:
+            m = int(np.ceil(np.log2(len(bases))))
+            for _ in range((1 << m) - len(bases)):
+                bases.append(torch.ones_like(bases[0], device=bases[0].device))
+            assert len(bases) == 1 << m
+            
+            r = 0
+            for _ in range(m):
+                new_bases = []
+                for i in range(0, len(bases), 2):
+                    s = bases[i] * bases[i+1]
+                    s = self.node_projections[r].forward(s) / (self.d_features ** 0.5)
+                    # for srht, we pad the output with zeros
+                    s[:, self.d_features:] = 0
+                    new_bases.append(s)
+                    r += 1
+                bases = new_bases
+            assert len(bases) == 1
+            sketch = bases[0]
+        else:
+            sketch = bases[0]
+            for i in range(1, self.degree):
+                sketch = sketch * bases[i]
+                sketch = self.node_projections[i-1].forward(sketch) / (self.d_features ** 0.5)
+                # for srht, we pad the output with zeros
+                sketch[:, self.d_features:] = 0
+                
+        return sketch[:, :self.d_features] / np.sqrt(self.d_features)
+
+
 class PolynomialSketch(torch.nn.Module):
     """
     The basic polynomial sketch (xTy/l^2 + b)^p with lengthscale l, bias b and degree p.
     """
 
     def __init__(self, d_in, d_features, degree=2, bias=0, lengthscale='auto', var=1.0, ard=False, trainable_kernel=False,
-                    device='cpu', projection_type='countsketch_sparse', hierarchical=False, complex_weights=False,
+                    device='cpu', projection_type='countsketch_sparse', ahle=False, tree=False, complex_weights=False,
                     complex_real=False, full_cov=False, num_osnap_samples=10):
         """
         d_in: Data input dimension
@@ -156,7 +223,8 @@ class PolynomialSketch(torch.nn.Module):
         ard: Automatic Relevance Determination = individual lengthscale per input dimension
         trainable_kernel: Learnable bias, lengthscales, kernel variance
         projection_type: rademacher/gaussian/srht/countsketch_sparse/countsketch_dense/countsketch_scatter
-        hierarchical: Whether to use hierarchical sketches (overcomes exponential variances w.r.t. p but is not always better)
+        ahle: Whether to use the construction by Ahle et al. (overcomes exponential variances w.r.t. p but is not always better)
+        tree: Whether to use Ahle et al. with a tree construction, otherwise sequential
         complex_weights: Whether to use complex-valued weights (almost always lower variances but more expensive)
         complex_real: Whether to use Complex-to-Real (CtR) sketches, the same as complex_weights but with a real transformation in the end
         num_osnap_samples: Only for projection_type='osnap' - Number of times each input coordinate is allocated to a random index (out of d_features)
@@ -165,13 +233,13 @@ class PolynomialSketch(torch.nn.Module):
         super(PolynomialSketch, self).__init__()
         self.d_in = d_in
         if complex_real:
-            # in the hierarchical construction, we take care of halving the features separately
             d_features = d_features // 2
         self.d_features = d_features
         self.degree = degree
         self.device = device
         self.projection_type = projection_type
-        self.hierarchical = hierarchical
+        self.ahle = ahle
+        self.tree = tree
         self.complex_weights = (complex_weights or complex_real)
         self.convolute_ts = True if self.projection_type.startswith('countsketch') else False
         self.complex_real = complex_real
@@ -209,8 +277,9 @@ class PolynomialSketch(torch.nn.Module):
                 complex_weights=False, device=device)
 
         # the number of leaf nodes is p
-        if self.hierarchical:
-            self.root = construct_sketch_tree(node_projection, leaf_projection, degree, self.d_in, d_features, srht=(projection_type=='srht'))
+        if self.ahle:
+            # self.root = construct_sketch_tree(node_projection, leaf_projection, degree, self.d_in, d_features, srht=(projection_type=='srht'))
+            self.sketch = AhleEtAl(node_projection, degree, self.d_in, d_features, tree=tree, srht=(projection_type=='srht'))
         else:
             self.sketch_list = torch.nn.ModuleList(
                 [node_projection(self.d_in, self.d_features) for _ in range(degree)]
@@ -218,8 +287,8 @@ class PolynomialSketch(torch.nn.Module):
 
     def resample(self):
         # seeding is handled globally!
-        if self.hierarchical:
-            self.root.recursive_resample()
+        if self.ahle:
+            self.sketch.resample()
         else:
             for node in self.sketch_list:
                 node.resample()
@@ -273,9 +342,10 @@ class PolynomialSketch(torch.nn.Module):
             # we then append the bias
             x = torch.cat([(0.5 * self.log_bias).exp().repeat(len(x), 1), x], dim=-1)
 
-        if self.hierarchical:
+        if self.ahle:
             #  recursive sketch
-            x = self.root.join_children(x)[:, :self.d_features]
+            # x = self.root.join_children(x)[:, :self.d_features]
+            x = self.sketch.forward(x)
         else:
             # standard sketch
             x = self.plain_forward(x)

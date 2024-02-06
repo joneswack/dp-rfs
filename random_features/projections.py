@@ -6,7 +6,7 @@ import time
 
 from torch._C import device
 
-# from util.hadamard_cuda.fwht import FastWalshHadamardTransform
+from util.hadamard_cuda.fwht import FastWalshHadamardTransform
 
 
 def generate_rademacher_samples(shape, complex_weights=False, device='cpu'):
@@ -15,10 +15,10 @@ def generate_rademacher_samples(shape, complex_weights=False, device='cpu'):
         support = torch.tensor([1j, -1j, 1, -1], dtype=torch.complex64, device=device)
     else:
         support = torch.tensor([1, -1], dtype=torch.float32, device=device)
-    #samples = torch.index_select(support, 0, torch.randint(len(support), shape).view(-1))
-    #return samples.reshape(shape)
-    indices = torch.randint(len(support), shape)
-    return support[indices]
+    samples = torch.index_select(support, 0, torch.randint(len(support), shape, device=device).view(-1))
+    return samples.reshape(shape)
+    #indices = torch.randint(len(support), shape)
+    #return support[indices]
 
 
 class CountSketch(torch.nn.Module):
