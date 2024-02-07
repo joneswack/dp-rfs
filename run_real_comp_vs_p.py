@@ -38,11 +38,13 @@ def sketch_error(x, y, D, degree, config, device):
 configs = [
     #{'name': 'TensorSketch', 'proj': 'countsketch_scatter', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
     {'name': 'Gaussian', 'proj': 'gaussian', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'ahle': False, 'tree': False},
+    {'name': 'Complex Gaussian', 'proj': 'gaussian', 'full_cov': False, 'complex_weights': True, 'complex_real': False, 'ahle': False, 'tree': False},
     {'name': 'Rademacher', 'proj': 'rademacher', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'ahle': False, 'tree': False},
-    {'name': 'Complex Rademacher', 'proj': 'rademacher', 'full_cov': False, 'complex_weights': True, 'complex_real': True, 'ahle': False, 'tree': False},
+    {'name': 'Complex Rademacher', 'proj': 'rademacher', 'full_cov': False, 'complex_weights': True, 'complex_real': False, 'ahle': False, 'tree': False},
     {'name': 'Ahle et al. Tree Rademacher', 'proj': 'rademacher', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'ahle': True, 'tree': True},
+    {'name': 'Ahle et al. Tree Rademacher Comp.', 'proj': 'rademacher', 'full_cov': False, 'complex_weights': True, 'complex_real': False, 'ahle': True, 'tree': True},
     {'name': 'Ahle et al. Rademacher', 'proj': 'rademacher', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'ahle': True, 'tree': False},
-    {'name': 'Ahle et al. Rademacher Comp.', 'proj': 'rademacher', 'full_cov': False, 'complex_weights': True, 'complex_real': True, 'ahle': True, 'tree': False},
+    {'name': 'Ahle et al. Rademacher Comp.', 'proj': 'rademacher', 'full_cov': False, 'complex_weights': True, 'complex_real': False, 'ahle': True, 'tree': False},
     #{'name': 'ProductSRHT', 'proj': 'srht', 'full_cov': False, 'complex_weights': False, 'complex_real': False, 'hierarchical': False},
     #{'name': 'CtR-ProductSRHT', 'proj': 'srht', 'full_cov': False, 'complex_weights': True, 'complex_real': True, 'hierarchical': False},
 ]
@@ -96,7 +98,7 @@ if __name__ == '__main__':
             mse = torch.cat(all_abs_squared_errors).mean()
             abs_err_std = torch.cat(all_abs_errors).std()
             abs_sq_err_std = torch.cat(all_abs_squared_errors).std()
-            print(config['name'], 'MAE: {}'.format(mae), 'Std: {}'.format(abs_err_stds))
+            print(config['name'], 'MAE: {}'.format(mae), 'Std: {}'.format(abs_err_std))
 
             log_dir = {
                 'name': config['name'],
