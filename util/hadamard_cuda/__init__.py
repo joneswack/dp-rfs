@@ -36,10 +36,10 @@ if not(dotlocalbin in os.environ['PATH'].split(':')):
     warnings.warn('PATH variable does not include ~/.local/bin. Updating PATH=$HOME/.local/bin:$PATH')
     os.environ['PATH'] += (':%s' % dotlocalbin)
 
-if int(torch.__version__.split('.')[1]) > 1:
-    cpp_file = 'hadamard_cuda.cpp'
-else:
-    cpp_file = 'hadamard_cuda_old.cpp'
+#if int(torch.__version__.split('.')[1]) > 1:
+cpp_file = 'hadamard_cuda.cpp'
+#else:
+#    cpp_file = 'hadamard_cuda_old.cpp'
 
 sources = [filedir + cpp_file]
 flags = ['-O3']

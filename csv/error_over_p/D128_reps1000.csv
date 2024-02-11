@@ -1,0 +1,55 @@
+name,p,proj,full_cov,complex_weights,complex_real,ahle,tree,err_mean,err_std
+Gaussian,1,gaussian,False,False,False,False,False,0.007540711667388678,0.010278645902872086
+Gaussian,2,gaussian,False,False,False,False,False,0.007805838715285063,0.012172755785286427
+Gaussian,3,gaussian,False,False,False,False,False,0.007989275269210339,0.023296156898140907
+Gaussian,4,gaussian,False,False,False,False,False,0.0067183151841163635,0.019508112221956253
+Gaussian,5,gaussian,False,False,False,False,False,0.00670185312628746,0.03436892852187157
+Gaussian,6,gaussian,False,False,False,False,False,0.00749791506677866,0.11661795526742935
+Gaussian,7,gaussian,False,False,False,False,False,0.004671651404350996,0.033783964812755585
+Gaussian,8,gaussian,False,False,False,False,False,0.007745339069515467,0.1112259030342102
+Gaussian,9,gaussian,False,False,False,False,False,0.0010471971472725272,0.011044751852750778
+Rademacher,1,rademacher,False,False,False,False,False,0.007842352613806725,0.01125318557024002
+Rademacher,2,rademacher,False,False,False,False,False,0.007524598855525255,0.011243125423789024
+Rademacher,3,rademacher,False,False,False,False,False,0.007476926781237125,0.01339702121913433
+Rademacher,4,rademacher,False,False,False,False,False,0.005760005675256252,0.011883937753736973
+Rademacher,5,rademacher,False,False,False,False,False,0.016530925408005714,0.3247703015804291
+Rademacher,6,rademacher,False,False,False,False,False,0.006539624184370041,0.03904646635055542
+Rademacher,7,rademacher,False,False,False,False,False,0.010019577108323574,0.1416541188955307
+Rademacher,8,rademacher,False,False,False,False,False,0.01240520179271698,0.17968910932540894
+Rademacher,9,rademacher,False,False,False,False,False,0.006650884170085192,0.12656618654727936
+Complex Rademacher,1,rademacher,False,True,True,False,False,0.007351757027208805,0.010031734593212605
+Complex Rademacher,2,rademacher,False,True,True,False,False,0.008165937848389149,0.012792856432497501
+Complex Rademacher,3,rademacher,False,True,True,False,False,0.007776269689202309,0.012128694914281368
+Complex Rademacher,4,rademacher,False,True,True,False,False,0.00777505524456501,0.015341868624091148
+Complex Rademacher,5,rademacher,False,True,True,False,False,0.008233624510467052,0.021786343306303024
+Complex Rademacher,6,rademacher,False,True,True,False,False,0.007886286824941635,0.03894989192485809
+Complex Rademacher,7,rademacher,False,True,True,False,False,0.009052706882357597,0.08027975261211395
+Complex Rademacher,8,rademacher,False,True,True,False,False,0.009584394283592701,0.07745394855737686
+Complex Rademacher,9,rademacher,False,True,True,False,False,0.004787102807313204,0.026007873937487602
+Ahle et al. Tree Rademacher,1,rademacher,False,False,False,True,True,0.008073661476373672,0.011123711243271828
+Ahle et al. Tree Rademacher,2,rademacher,False,False,False,True,True,0.015195156447589397,0.024380024522542953
+Ahle et al. Tree Rademacher,3,rademacher,False,False,False,True,True,0.01604412868618965,0.028230838477611542
+Ahle et al. Tree Rademacher,4,rademacher,False,False,False,True,True,0.014283531345427036,0.0235101617872715
+Ahle et al. Tree Rademacher,5,rademacher,False,False,False,True,True,0.017581915482878685,0.04927808418869972
+Ahle et al. Tree Rademacher,6,rademacher,False,False,False,True,True,0.01409480907022953,0.030888622626662254
+Ahle et al. Tree Rademacher,7,rademacher,False,False,False,True,True,0.015047714114189148,0.03005210869014263
+Ahle et al. Tree Rademacher,8,rademacher,False,False,False,True,True,0.015325886197388172,0.04189964756369591
+Ahle et al. Tree Rademacher,9,rademacher,False,False,False,True,True,0.01637859456241131,0.0429149866104126
+Ahle et al. Rademacher,1,rademacher,False,False,False,True,False,0.008073661476373672,0.011123711243271828
+Ahle et al. Rademacher,2,rademacher,False,False,False,True,False,0.015195156447589397,0.024380024522542953
+Ahle et al. Rademacher,3,rademacher,False,False,False,True,False,0.016567004844546318,0.029139917343854904
+Ahle et al. Rademacher,4,rademacher,False,False,False,True,False,0.014598659239709377,0.02736826427280903
+Ahle et al. Rademacher,5,rademacher,False,False,False,True,False,0.01458623819053173,0.024763185530900955
+Ahle et al. Rademacher,6,rademacher,False,False,False,True,False,0.01485089398920536,0.027041660621762276
+Ahle et al. Rademacher,7,rademacher,False,False,False,True,False,0.01637536659836769,0.04008184373378754
+Ahle et al. Rademacher,8,rademacher,False,False,False,True,False,0.015933137387037277,0.03650830686092377
+Ahle et al. Rademacher,9,rademacher,False,False,False,True,False,0.017874091863632202,0.04207165166735649
+Ahle et al. Rademacher Comp.,1,rademacher,False,True,True,True,False,0.008198710158467293,0.011586250737309456
+Ahle et al. Rademacher Comp.,2,rademacher,False,True,True,True,False,0.015366789884865284,0.022926809266209602
+Ahle et al. Rademacher Comp.,3,rademacher,False,True,True,True,False,0.01516846101731062,0.02296760305762291
+Ahle et al. Rademacher Comp.,4,rademacher,False,True,True,True,False,0.01536016259342432,0.02474561147391796
+Ahle et al. Rademacher Comp.,5,rademacher,False,True,True,True,False,0.016176918521523476,0.026300087571144104
+Ahle et al. Rademacher Comp.,6,rademacher,False,True,True,True,False,0.014287841506302357,0.026440342888236046
+Ahle et al. Rademacher Comp.,7,rademacher,False,True,True,True,False,0.01667432300746441,0.03457942232489586
+Ahle et al. Rademacher Comp.,8,rademacher,False,True,True,True,False,0.0163987148553133,0.031146014109253883
+Ahle et al. Rademacher Comp.,9,rademacher,False,True,True,True,False,0.015341724269092083,0.030247872695326805

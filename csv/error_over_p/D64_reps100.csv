@@ -1,0 +1,5 @@
+p,proj,full_cov,complex_weights,complex_real,ahle,tree,err_mean,err_std
+1,rademacher,False,True,True,True,True,0.014011213555932045,0.002919288817793131
+2,rademacher,False,True,True,True,True,0.0320163294672966,0.00457810889929533
+1,rademacher,False,True,True,True,False,0.014011213555932045,0.002919288817793131
+2,rademacher,False,True,True,True,False,0.0320163294672966,0.00457810889929533
