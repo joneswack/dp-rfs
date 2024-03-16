@@ -7,8 +7,8 @@
     "max_sampling_degree": 10,
     "projection_range": {
         "min": 1,
-        "max": 10,
-        "step": 1
+        "max": 5,
+        "step": 2
     },
     "noise_var_range": {
         "regression": {
@@ -22,18 +22,27 @@
             "base": 10
         }
     },
+    "craft_factor": 10,
     "srf_model_path_prefix": "saved_models/poly_a4.0_p3",
     "baseline_config": {"method": "srf", "proj": "gaussian", "complex_weights": false},
     "configurations": [
-        {"method": "maclaurin", "proj": "rademacher", "hierarchical": false, "complex_weights": false},
-        {"method": "maclaurin", "proj": "rademacher", "hierarchical": false, "complex_weights": true},
-        {"method": "maclaurin", "proj": "srht", "hierarchical": false, "complex_weights": false},
-        {"method": "maclaurin", "proj": "srht", "hierarchical": false, "complex_weights": true},
-        {"method": "maclaurin", "proj": "countsketch_scatter", "hierarchical": false, "complex_weights": false},
-        {"method": "poly_sketch", "proj": "rademacher", "hierarchical": false, "complex_weights": false},
-        {"method": "poly_sketch", "proj": "rademacher", "hierarchical": false, "complex_weights": true},
-        {"method": "poly_sketch", "proj": "srht", "hierarchical": false, "complex_weights": false},
-        {"method": "poly_sketch", "proj": "srht", "hierarchical": false, "complex_weights": true},
-        {"method": "poly_sketch", "proj": "countsketch_scatter", "hierarchical": false, "complex_weights": false}
+        {"method": "srf", "proj": "gaussian", "complex_weights": false},
+        {"method": "srf", "proj": "srht", "complex_weights": false},
+        {"method": "srf", "proj": "srht", "complex_weights": true},
+        {"method": "maclaurin", "proj": "rademacher", "ahle": false, "complex_weights": false},
+        {"method": "maclaurin", "proj": "rademacher", "ahle": false, "complex_weights": true},
+        {"method": "maclaurin", "proj": "srht", "ahle": false, "complex_weights": false, "full_cov": false},
+        {"method": "maclaurin", "proj": "srht", "ahle": false, "complex_weights": true, "full_cov": false},
+        {"method": "poly_sketch", "proj": "gaussian", "ahle": false, "complex_weights": false},
+        {"method": "poly_sketch", "proj": "gaussian", "ahle": false, "complex_weights": true},
+        {"method": "poly_sketch", "proj": "rademacher", "ahle": false, "complex_weights": false},
+        {"method": "poly_sketch", "proj": "rademacher", "ahle": false, "complex_weights": true},
+        {"method": "poly_sketch", "proj": "rademacher", "ahle": true, "tree": true,"complex_weights": false},
+        {"method": "poly_sketch", "proj": "rademacher", "ahle": true, "tree": true,"complex_weights": true},
+        {"method": "poly_sketch", "proj": "srht", "ahle": false, "complex_weights": false, "full_cov": false},
+        {"method": "poly_sketch", "proj": "srht", "ahle": false, "complex_weights": true, "full_cov": false},
+        {"method": "poly_sketch", "proj": "srht", "ahle": true,  "tree": true, "complex_weights": false, "full_cov": false},
+        {"method": "poly_sketch", "proj": "srht", "ahle": true,  "tree": true, "complex_weights": true, "full_cov": false},
+        {"method": "poly_sketch", "proj": "countsketch_scatter", "ahle": false, "complex_weights": false}
     ]
 }

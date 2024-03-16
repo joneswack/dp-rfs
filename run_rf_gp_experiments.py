@@ -24,9 +24,9 @@ Runs Gaussian Process Classification experiments as closed form GP regression on
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rf_parameter_file', type=str, required=False, default='config/rf_parameters/poly3_ctr.json',
+    parser.add_argument('--rf_parameter_file', type=str, required=False, default='config/rf_parameters/poly3.json',
                         help='Path to RF parameter file')
-    parser.add_argument('--datasets_file', type=str, required=False, default='config/active_datasets3.json',
+    parser.add_argument('--datasets_file', type=str, required=False, default='config/active_datasets2.json',
                         help='List of datasets to be used for the experiments')
     parser.add_argument('--num_data_samples', type=int, required=False, default=5000,
                         help='Number of data samples for lengthscale estimation')
@@ -161,6 +161,7 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
 
     comp_real = config['complex_real'] if 'complex_real' in config.keys() else False
     full_cov = config['full_cov'] if 'full_cov' in config.keys() else False
+    config['craft'] = config['craft'] if 'craft' in config.keys() else False
     
     train_data_padded = util.data.pad_data_pow_2(data_dict['train_data'], offset=offset)
     test_data_padded = util.data.pad_data_pow_2(data_dict['test_data'], offset=offset)
@@ -184,7 +185,7 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
             train_data_padded.shape[1], proj_dim,
             approx_degree=rf_params['max_sampling_degree'], lengthscale=data_dict['lengthscale'],
             var=data_dict['kernel_var'], trainable_kernel=False, method=config['method'],
-            projection_type=config['proj'], hierarchical=config['hierarchical'],
+            projection_type=config['proj'], ahle=config['ahle'], tree=config['tree'],
             complex_weights=config['complex_weights'], device=('cuda' if args.use_gpu else 'cpu')
         )
         feature_encoder.initialize_sampling_distribution(train_data_padded[train_idxs],
@@ -215,7 +216,8 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
         feature_encoder = Maclaurin(train_data_padded.shape[1], proj_dim, coef_fun=kernel_coefs,
                                     module_args={
                                         'projection': config['proj'],
-                                        'hierarchical': config['hierarchical'],
+                                        'ahle': config['ahle'],
+                                        'tree': config['tree'],
                                         'complex_weights': config['complex_weights']
                                     },
                                     measure=measure, bias=0, device=('cuda' if args.use_gpu else 'cpu'),
@@ -236,7 +238,7 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
     else:
         feature_encoder = PolynomialSketch(train_data_padded.shape[1], proj_dim,
                                         degree=config['degree'], bias=config['bias'],
-                                        projection_type=config['proj'], hierarchical=config['hierarchical'],
+                                        projection_type=config['proj'], ahle=config['ahle'], tree=config['tree'],
                                         complex_weights=config['complex_weights'], complex_real=comp_real,
                                         full_cov=full_cov, lengthscale=data_dict['lengthscale'],
                                         device=('cuda' if args.use_gpu else 'cpu'),
@@ -250,7 +252,7 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
     if config['craft']:
         feature_encoder_2 = PolynomialSketch(up_features, down_features,
                                         degree=1, bias=0,
-                                        projection_type='srht', hierarchical=False,
+                                        projection_type='srht', ahle=False, tree=False,
                                         complex_weights=False, complex_real=False,
                                         full_cov=False, lengthscale=1.,
                                         device=('cuda' if args.use_gpu else 'cpu'),
@@ -307,7 +309,7 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
         approx_kernel = approx_kernel.real
 
     frob_error, rel_frob_error = frobenius_norm(approx_kernel, ref_kernel)
-    spec_error, rel_spec_error = spectral_norm(approx_kernel, ref_kernel)
+    # spec_error, rel_spec_error = spectral_norm(approx_kernel, ref_kernel)
 
     ### run subsampled GP for KL divergence
     f_test_mean_est, f_test_stds_est = het_gp.predictive_dist(
@@ -372,7 +374,8 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
         'comp_real': comp_real,
         'craft': config['craft'],
         'full_cov': full_cov,
-        'hier': config['hierarchical'],
+        'ahle': config['ahle'],
+        'tree': config['tree'],
         'kernel_var': feature_encoder.log_var.exp().item(),
         'kernel_len': feature_encoder.log_lengthscale.exp().item(),
         'test_error': test_error,
@@ -380,8 +383,8 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
         'test_label_var': test_label_var,
         'k_frob_error': frob_error.item(),
         'k_rel_frob_error': rel_frob_error.item(),
-        'k_spec_error': spec_error.item(),
-        'k_rel_spec_error': rel_spec_error.item(),
+        # 'k_spec_error': spec_error.item(),
+        # 'k_rel_spec_error': rel_spec_error.item(),
         'test_kl': test_kl.item(),
         'test_mean_mse': test_mean_mse.item(),
         'test_var_mse': test_var_mse.item(),
@@ -450,12 +453,14 @@ if __name__ == '__main__':
         else:
             baseline_config['bias'] = 0
             baseline_config['degree'] = 0
-        if 'hierarchical' not in baseline_config.keys():
-            baseline_config['hierarchical'] = False
+        if 'ahle' not in baseline_config.keys():
+            baseline_config['ahle'] = False
+            baseline_config['tree'] = False
 
         print('Determining noise variance...')
         # we select noise_vars according to validation mnll on random fourier features
-        d_features = int(2 ** rf_parameters['projection_range']['max'])
+        # d_features = int(2 ** rf_parameters['projection_range']['max'])
+        d_features = int(pow_2_shape * rf_parameters['projection_range']['max'])
 
         noise_var_csv_handler = util.data.DF_Handler(rf_parameters['save_name'] + '_noise_var', '{}'.format(data_name))
         sub_data, val_data, sub_labels, val_labels = util.data.create_train_val_split(train_data, train_labels, train_size=0.9)
@@ -500,21 +505,21 @@ if __name__ == '__main__':
 
         print('Comparing approximations...')
         
-        # down_features_list = [pow_2_shape * i for i in range(
-        #     rf_parameters['projection_range']['min'],
-        #     rf_parameters['projection_range']['max']+1,
-        #     rf_parameters['projection_range']['step']
-        # )]
-
-        down_features_list = [2**i for i in range(
+        down_features_list = [pow_2_shape * i for i in range(
             rf_parameters['projection_range']['min'],
             rf_parameters['projection_range']['max']+1,
             rf_parameters['projection_range']['step']
-        )] + [10240]
+        )]
+
+        # down_features_list = [2**i for i in range(
+        #     rf_parameters['projection_range']['min'],
+        #     rf_parameters['projection_range']['max']+1,
+        #     rf_parameters['projection_range']['step']
+        # )] + [10240]
         # up projection dimension of craft maps (must be power of 2 for subsequent srht)
         # up_features = pow_2_shape * rf_parameters['craft_factor']
         # up_features = int(2**np.ceil(np.log2(up_features)))
-        up_features = 2**rf_parameters['craft_factor']
+        up_features = rf_parameters['craft_factor'] * pow_2_shape # 2**rf_parameters['craft_factor']
         # dimensions = [int(pow_2_shape * i) for i in range(1,11)] # [0.125, 0.25, 0.5]
         # dimensions += [2**i for i in range(7, 14)]
         # dimensions = list(set(dimensions))
@@ -551,8 +556,9 @@ if __name__ == '__main__':
                     else:
                         config['bias'] = 0
                         config['degree'] = 0
-                    if 'hierarchical' not in config.keys():
-                        config['hierarchical'] = False
+                    if 'ahle' not in config.keys():
+                        config['ahle'] = False
+                        config['tree'] = False
                     if 'craft' not in config.keys():
                         config['craft'] = False
 

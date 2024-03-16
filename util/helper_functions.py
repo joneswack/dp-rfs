@@ -60,8 +60,8 @@ def regression_scores(test_mean, test_vars, test_labels):
 
 def frobenius_norm(k_hat, k):
     difference = k_hat - k
-    frob_error = difference.pow(2).sum().sqrt()
-    rel_frob_error = frob_error / k.pow(2).sum().sqrt()
+    frob_error = difference.abs().pow(2).sum().sqrt()
+    rel_frob_error = frob_error / k.abs().pow(2).sum().sqrt()
     return frob_error, rel_frob_error
 
 def spectral_norm(k_hat, k):
