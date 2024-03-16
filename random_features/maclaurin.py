@@ -85,7 +85,7 @@ class Maclaurin(torch.nn.Module):
         """
 
         with torch.no_grad():
-            if self.module_args['hierarchical']:
+            if self.module_args['ahle']:
                 raise RuntimeError('Expected variance for hierarchical random features not implemented yet!')
             if self.module_args['projection'].split('_')[0] == 'countsketch':
                 raise RuntimeError('The variance equations for TensorSketch are unknown!')
@@ -283,12 +283,11 @@ class Maclaurin(torch.nn.Module):
             # we skip the constant
             # the bias and lengthscales will already be included in the data
             proj = self.module_args['projection']
-            hier = self.module_args['hierarchical'] if degree >= 3 else False
             complex_weights = self.module_args['complex_weights']
 
             mod = PolynomialSketch(self.d_in, int(dim), degree=degree,
                                     bias=0, lengthscale=1.0, var=1.0, projection_type=proj,
-                                    hierarchical=hier, complex_weights=complex_weights,
+                                    ahle=False, complex_weights=complex_weights,
                                     trainable_kernel=False, device=self.device)
             mod.resample()
             self.modules.append(mod)

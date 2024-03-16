@@ -28,7 +28,7 @@ class Fixed_Measure():
         samples = [x * [i+offset] for i, x in enumerate(self.distribution)]
         samples = [item for sublist in samples for item in sublist]
 
-        return np.array(samples).astype(np.int)
+        return np.array(samples).astype(int)
 
 class Exponential_Measure(rv_discrete):
     """

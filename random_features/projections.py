@@ -261,7 +261,7 @@ class SRHT(torch.nn.Module):
         if self.shuffle or self.full_cov:
             x = x.gather(1, self.permutations[None, :].expand(len(x), self.d_features))
 
-        return x
+        return x[:, :self.d_features]
 
 class RademacherTransform(torch.nn.Module):
     def __init__(self, d_in, d_features, complex_weights=False, device='cpu'):
