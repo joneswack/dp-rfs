@@ -27,7 +27,7 @@ def sketch_error(x, y, D, degree, config, device):
 
     features_x = feature_encoder.forward(x)
     features_y = feature_encoder.forward(y)
-    k_hat = torch.sum(features_x * features_y.conj(), dim=-1).real
+    k_hat = torch.sum(features_x * features_y.conj(), dim=-1) #.real
     k_target = (x * y).sum(axis=-1)**degree
 
     absolute_errors = (k_hat - k_target).abs()
@@ -55,7 +55,7 @@ def parse_args():
                         help='The maximum degree for which to measure the error')
     parser.add_argument('--num_seeds', type=int, required=False, default=1000,
                         help='Number of seeds (runs)')
-    parser.add_argument('--num_features', type=int, required=False, default=1024,
+    parser.add_argument('--input_dim', type=int, required=False, default=32,
                         help='Number of random features')
     parser.add_argument('--use_gpu', dest='use_gpu', action='store_true')
     parser.set_defaults(use_gpu=False)
@@ -68,14 +68,14 @@ if __name__ == '__main__':
     args = parse_args()
     device = ('cuda' if args.use_gpu else 'cpu')
 
-    for d in [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]:
-        csv_handler = util.data.DF_Handler('error_over_p', 'ctr_abs_randn_d{}_D{}_reps{}'.format(d, args.num_features, args.num_seeds))
+    for D in [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]:
+        csv_handler = util.data.DF_Handler('error_over_p', 'abs_randn_d{}_D{}_reps{}'.format(args.input_dim, D, args.num_seeds))
 
         # also add different angles later on
-        x = torch.randn([1000, d], dtype=torch.float32, device=device).abs()
-        y = torch.randn([1000, d], dtype=torch.float32, device=device).abs()
-        #x = torch.ones([1000, 10], dtype=torch.float32, device=device)
-        #y = torch.ones([1000, 10], dtype=torch.float32, device=device)
+        x = torch.randn([1000, args.input_dim], dtype=torch.float32, device=device).abs()
+        y = torch.randn([1000, args.input_dim], dtype=torch.float32, device=device).abs()
+        #x = torch.ones([1000, args.input_dim], dtype=torch.float32, device=device)
+        #y = torch.ones([1000, args.input_dim], dtype=torch.float32, device=device)
         #x[:, 5:] = 0
         #y[:, :5] = 0
         x /= x.norm(dim=-1, keepdim=True)
@@ -91,7 +91,7 @@ if __name__ == '__main__':
                 all_abs_errors = []
                 all_abs_squared_errors = []
                 for j in range(args.num_seeds):
-                    abs_errors, abs_squared_errors = sketch_error(x, y, args.num_features, degree, config, device)
+                    abs_errors, abs_squared_errors = sketch_error(x, y, D, degree, config, device)
                     all_abs_errors.append(abs_errors)
                     all_abs_squared_errors.append(abs_squared_errors)
 
@@ -118,24 +118,3 @@ if __name__ == '__main__':
 
                 csv_handler.append(log_dir)
                 csv_handler.save()
-
-
-    import matplotlib.pyplot as plt
-    import pandas as pd
-    #plt.style.use('seaborn')
-    #plt.style.use('ggplot')
-
-    cm = plt.get_cmap('tab20')
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    NUM_COLORS = len(configs)
-    ax.set_prop_cycle('color', [cm(1.*i/NUM_COLORS) for i in range(NUM_COLORS)])
-
-    df = pd.read_csv(csv_handler.file_path)
-
-    for config in configs:
-        ax.plot(list(range(1, args.max_degree+1)), df.loc[df['name']==config['name'], 'mae'], label=config['name'])
-
-    plt.yscale('log')
-    plt.legend()
-    plt.show()

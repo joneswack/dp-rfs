@@ -6,3 +6,5 @@ notebooks/complex-time.ipynb
 saved_models/conv_features
 saved_models/ecdf_plots
 tensorboard_logs
+poetry.lock
+pyproject.toml
