@@ -158,10 +158,6 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
         offset = 1
     else:
         offset = 0
-
-    comp_real = config['complex_real'] if 'complex_real' in config.keys() else False
-    full_cov = config['full_cov'] if 'full_cov' in config.keys() else False
-    config['craft'] = config['craft'] if 'craft' in config.keys() else False
     
     train_data_padded = util.data.pad_data_pow_2(data_dict['train_data'], offset=offset)
     test_data_padded = util.data.pad_data_pow_2(data_dict['test_data'], offset=offset)
@@ -219,7 +215,7 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
                                         'ahle': config['ahle'],
                                         'tree': config['tree'],
                                         'complex_weights': config['complex_weights'],
-                                        'complex_real': comp_real
+                                        'complex_real': config['complex_real']
                                     },
                                     measure=measure, bias=0, device=('cuda' if args.use_gpu else 'cpu'),
                                     lengthscale=data_dict['lengthscale'],
@@ -240,8 +236,8 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
         feature_encoder = PolynomialSketch(train_data_padded.shape[1], proj_dim,
                                         degree=config['degree'], bias=config['bias'],
                                         projection_type=config['proj'], ahle=config['ahle'], tree=config['tree'],
-                                        complex_weights=config['complex_weights'], complex_real=comp_real,
-                                        full_cov=full_cov, lengthscale=data_dict['lengthscale'],
+                                        complex_weights=config['complex_weights'], complex_real=config['complex_real'],
+                                        full_cov=config['full_cov'], lengthscale=data_dict['lengthscale'],
                                         device=('cuda' if args.use_gpu else 'cpu'),
                                         var=data_dict['kernel_var'], ard=False, trainable_kernel=False)
         
@@ -372,9 +368,9 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
         'bias': config['bias'],
         'proj': config['proj'],
         'comp': config['complex_weights'],
-        'comp_real': comp_real,
+        'comp_real': config['complex_real'],
         'craft': config['craft'],
-        'full_cov': full_cov,
+        'full_cov': config['full_cov'],
         'ahle': config['ahle'],
         'tree': config['tree'],
         'kernel_var': feature_encoder.log_var.exp().item(),
@@ -474,31 +470,31 @@ if __name__ == '__main__':
             float(noise_var_params['base'])**i for i in range(noise_var_params['min'], noise_var_params['max']+1)
         ]
         
-        # for noise_var in noise_vars:
-        #     # config, data_name, current_train, current_test, train_labels, test_labels, num_samples, noise_var, regression=False
-        #     with torch.no_grad():
-        #         # try:
-        #         data_dict = prepare_data(baseline_config, args, rf_parameters,
-        #             data_name, sub_data, val_data, sub_labels, val_labels,
-        #             noise_var, regression=regression
-        #         )
+        for noise_var in noise_vars:
+            # config, data_name, current_train, current_test, train_labels, test_labels, num_samples, noise_var, regression=False
+            with torch.no_grad():
+                # try:
+                data_dict = prepare_data(baseline_config, args, rf_parameters,
+                    data_name, sub_data, val_data, sub_labels, val_labels,
+                    noise_var, regression=regression
+                )
 
-        #         log_dir = run_rf_gp(data_dict, d_features, d_features, baseline_config, args, rf_parameters, 0)
-        #         # except Exception as e:
-        #         #     print(e)
-        #         #     print('Skipping current configuration...')
-        #         #     continue
+                log_dir = run_rf_gp(data_dict, d_features, d_features, baseline_config, args, rf_parameters, 0)
+                # except Exception as e:
+                #     print(e)
+                #     print('Skipping current configuration...')
+                #     continue
 
-        #     noise_var_csv_handler.append(log_dir)
-        #     log_handler.append(log_dir)
-        #     noise_var_csv_handler.save()
+            noise_var_csv_handler.append(log_dir)
+            log_handler.append(log_dir)
+            noise_var_csv_handler.save()
 
-        # noise_var_df = pd.read_csv(noise_var_csv_handler.file_path)
-        # noise_var_opt = noise_var_df.sort_values('test_mnll', axis=0, ascending=True)['noise_var'].values[0]
+        noise_var_df = pd.read_csv(noise_var_csv_handler.file_path)
+        noise_var_opt = noise_var_df.sort_values('test_mnll', axis=0, ascending=True)['noise_var'].values[0]
 
-        # print('Optimal noise var: {}'.format(noise_var_opt))
+        print('Optimal noise var: {}'.format(noise_var_opt))
 
-        noise_var_opt = 10**(-3)
+        # noise_var_opt = 10**(-3)
 
         del sub_data, val_data
         
@@ -557,25 +553,21 @@ if __name__ == '__main__':
                     else:
                         config['bias'] = 0
                         config['degree'] = 0
-                    if 'complex_real' not in config.keys():
-                        config['complex_real'] = False
-                    if 'ahle' not in config.keys():
-                        config['ahle'] = False
-                    if 'tree' not in config.keys():
-                        config['tree'] = False
-                    if 'craft' not in config.keys():
-                        config['craft'] = False
+                    
+                    for optional_key in ['complex_real', 'ahle', 'tree', 'craft', 'full_cov']:
+                        if optional_key not in config.keys():
+                            config[optional_key] = False
 
                     with torch.no_grad():
-                        # try:
-                        log_dir = run_rf_gp(data_dict, down_features, up_features, config, args, rf_parameters, seed)
-                        log_handler.append(log_dir)
-                        csv_handler.append(log_dir)
-                        csv_handler.save()
-                        # except Exception as e:
-                        #     print(e)
-                        #     print('Skipping current configuration...')
-                        #     continue
+                        try:
+                            log_dir = run_rf_gp(data_dict, down_features, up_features, config, args, rf_parameters, seed)
+                            log_handler.append(log_dir)
+                            csv_handler.append(log_dir)
+                            csv_handler.save()
+                        except Exception as e:
+                            print(e)
+                            print('Skipping current configuration...')
+                            continue
 
 
         print('Total execution time: {:.2f}'.format(time.time()-start_time))
