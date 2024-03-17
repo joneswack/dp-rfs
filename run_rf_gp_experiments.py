@@ -173,6 +173,10 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
     f_test_stds_ref = data_dict['f_test_stds_ref']
     regression = data_dict['regression']
 
+    for optional_key in ['complex_real', 'ahle', 'tree', 'craft', 'full_cov']:
+        if optional_key not in config.keys():
+            config[optional_key] = False
+
     proj_dim = up_features if config['craft'] else down_features
 
     if rf_params['kernel'] == 'gaussian':
@@ -553,10 +557,6 @@ if __name__ == '__main__':
                     else:
                         config['bias'] = 0
                         config['degree'] = 0
-                    
-                    for optional_key in ['complex_real', 'ahle', 'tree', 'craft', 'full_cov', 'craft']:
-                        if optional_key not in config.keys():
-                            config[optional_key] = False
 
                     with torch.no_grad():
                         try:
