@@ -554,7 +554,7 @@ if __name__ == '__main__':
                         config['bias'] = 0
                         config['degree'] = 0
                     
-                    for optional_key in ['complex_real', 'ahle', 'tree', 'craft', 'full_cov']:
+                    for optional_key in ['complex_real', 'ahle', 'tree', 'craft', 'full_cov', 'craft']:
                         if optional_key not in config.keys():
                             config[optional_key] = False
 
