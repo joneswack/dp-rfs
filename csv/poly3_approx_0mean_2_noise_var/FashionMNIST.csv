@@ -1,0 +1,2 @@
+dataset,method,degree,bias,proj,comp,comp_real,craft,full_cov,ahle,tree,kernel_var,kernel_len,test_error,test_mnll,test_label_var,k_frob_error,k_rel_frob_error,test_kl,test_mean_mse,test_var_mse,D,E,feature_dist,noise_var,feature_time,pred_time,seed
+FashionMNIST,srf,3,0.875,gaussian,False,False,False,False,False,False,9.030265808105469,2.8284270763397217,0.11883333325386047,0.37969082593917847,0.09000000357627869,491.7111511230469,0.015992412343621254,670.564208984375,0.1103661060333252,0.0021416693925857544,5120,5120,None,0.001,0.9371309280395508,112.19644808769226,0

@@ -24,7 +24,7 @@ Runs Gaussian Process Classification experiments as closed form GP regression on
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rf_parameter_file', type=str, required=False, default='config/rf_parameters/poly3.json',
+    parser.add_argument('--rf_parameter_file', type=str, required=False, default='config/rf_parameters/poly3_copy.json',
                         help='Path to RF parameter file')
     parser.add_argument('--datasets_file', type=str, required=False, default='config/active_datasets2.json',
                         help='List of datasets to be used for the experiments')
@@ -496,7 +496,7 @@ if __name__ == '__main__':
         noise_var_df = pd.read_csv(noise_var_csv_handler.file_path)
         noise_var_opt = noise_var_df.sort_values('test_mnll', axis=0, ascending=True)['noise_var'].values[0]
 
-        # print('Optimal noise var: {}'.format(noise_var_opt))
+        print('Optimal noise var: {}'.format(noise_var_opt))
 
         # noise_var_opt = 10**(-3)
 
