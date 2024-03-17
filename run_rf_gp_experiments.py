@@ -269,8 +269,8 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
 
     num_elements = 5000
 
-    train_features = torch.zeros(len(train_data_padded), down_features, device=('cuda' if args.use_gpu else 'cpu'))
-    test_features = torch.zeros(len(test_data_padded), down_features, device=('cuda' if args.use_gpu else 'cpu'))
+    train_features = torch.zeros(len(train_data_padded), down_features, device=('cuda' if args.use_gpu else 'cpu'), dtype=torch.cfloat)
+    test_features = torch.zeros(len(test_data_padded), down_features, device=('cuda' if args.use_gpu else 'cpu'), dtype=torch.cfloat)
 
     for phase in ['train', 'test']:
         if phase == 'train':
@@ -302,7 +302,7 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
 
     ### kernel approximation on a subset of the test data
     approx_kernel = test_features[test_idxs] @ test_features[test_idxs].conj().t()
-    if config['complex_weights']:
+    if config['complex_real']:
         approx_kernel = approx_kernel.real
 
     frob_error, rel_frob_error = frobenius_norm(approx_kernel, ref_kernel)
@@ -492,7 +492,7 @@ if __name__ == '__main__':
         noise_var_df = pd.read_csv(noise_var_csv_handler.file_path)
         noise_var_opt = noise_var_df.sort_values('test_mnll', axis=0, ascending=True)['noise_var'].values[0]
 
-        print('Optimal noise var: {}'.format(noise_var_opt))
+        # print('Optimal noise var: {}'.format(noise_var_opt))
 
         # noise_var_opt = 10**(-3)
 
