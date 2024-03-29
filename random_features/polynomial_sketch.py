@@ -186,9 +186,9 @@ class AhleEtAl(torch.nn.Module):
                 new_bases = []
                 for i in range(0, len(bases), 2):
                     s = bases[i] * bases[i+1]
-                    s = self.node_projections[r].forward(s) / (self.d_features ** 0.5)
                     # for srht, we pad the output with zeros
                     s[:, self.d_features:] = 0
+                    s = self.node_projections[r].forward(s) / (self.d_features ** 0.5)
                     new_bases.append(s)
                     r += 1
                 bases = new_bases
@@ -198,9 +198,9 @@ class AhleEtAl(torch.nn.Module):
             sketch = bases[0]
             for i in range(1, self.degree):
                 sketch = sketch * bases[i]
-                sketch = self.node_projections[i-1].forward(sketch) / (self.d_features ** 0.5)
                 # for srht, we pad the output with zeros
                 sketch[:, self.d_features:] = 0
+                sketch = self.node_projections[i-1].forward(sketch) / (self.d_features ** 0.5)
                 
         return sketch[:, :self.d_features] / np.sqrt(self.d_features)
 

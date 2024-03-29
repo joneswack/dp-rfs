@@ -1,0 +1,32 @@
+{
+    "kernel": "polynomial",
+    "save_name": "poly10_approx_0mean_a2_debug",
+    "degree": 10,
+    "a": 2,
+    "min_sampling_degree": 2,
+    "max_sampling_degree": 10,
+    "projection_range": {
+        "min": 1,
+        "max": 5,
+        "step": 2
+    },
+    "noise_var_range": {
+        "regression": {
+            "min": -15,
+            "max": 14,
+            "base": 2
+        },
+        "classification": {
+            "min": -3,
+            "max": 0,
+            "base": 10
+        }
+    },
+    "craft_factor": 10,
+    "srf_model_path_prefix": "saved_models/poly_a2.0_p10",
+    "baseline_config": {"method": "srf", "proj": "gaussian", "complex_weights": false},
+    "configurations": [
+        {"method": "poly_sketch", "proj": "srht", "ahle": false, "complex_weights": false, "full_cov": false},
+        {"method": "poly_sketch", "proj": "srht", "ahle": true,  "tree": true, "complex_weights": false, "full_cov": false}
+    ]
+}

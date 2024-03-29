@@ -24,7 +24,7 @@ Runs Gaussian Process Classification experiments as closed form GP regression on
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rf_parameter_file', type=str, required=False, default='config/rf_parameters/poly3_a2.json',
+    parser.add_argument('--rf_parameter_file', type=str, required=False, default='config/rf_parameters/poly10_a2_debug.json',
                         help='Path to RF parameter file')
     parser.add_argument('--datasets_file', type=str, required=False, default='config/active_datasets2.json',
                         help='List of datasets to be used for the experiments')
@@ -34,6 +34,8 @@ def parse_args():
                         help='Number of mc samples for predictive distribution')
     parser.add_argument('--num_seeds', type=int, required=False, default=20,
                         help='Number of seeds (runs)')
+    parser.add_argument('--zero_center', dest='zero_center', action='store_true')
+    parser.set_defaults(zero_center=False)
     parser.add_argument('--use_gpu', dest='use_gpu', action='store_true')
     parser.set_defaults(use_gpu=False)
 
@@ -81,20 +83,20 @@ def prepare_data(config, args, rf_parameters, data_name, current_train, current_
     mm = mm - ymean
     kernel_var = mm.var().item()
 
-    if rf_parameters['kernel'] == 'gaussian':
+    if args.zero_center:
         # we zero center the data
         current_train, current_test = util.data.standardize_data(current_train, current_test)
+    else:
+        # we subtract the minimum value of the training data to make data positive
+        min_val = torch.min(current_train, 0)[0]
+        current_train = current_train - min_val
+        current_test = current_test - min_val
+
+    if rf_parameters['kernel'] == 'gaussian':
         lengthscale = torch.cdist(current_train[train_idxs], current_train[train_idxs]).median().item()
         kernel_fun = lambda x, y: kernel_var * gaussian_kernel(
             x, y, lengthscale=lengthscale)
     else:
-        # if data_name not in ['MNIST']:
-        # zero-centering
-        current_train, current_test = util.data.standardize_data(current_train, current_test)
-
-        # min_val = torch.min(current_train, 0)[0]
-        # current_train = current_train - min_val
-        # current_test = current_test - min_val
         # unit normalization
         current_train = current_train / current_train.norm(dim=1, keepdim=True)
         current_test = current_test / current_test.norm(dim=1, keepdim=True)
@@ -333,6 +335,7 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
         torch.cuda.synchronize()
     start = time.time()
 
+    # run experiment on all data for test errors
     if regression:
         f_test_mean, f_test_stds = het_gp.predictive_dist(
             train_features, test_features,
@@ -345,6 +348,11 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
 
         f_test_mean += train_label_mean
         test_error, test_mnll = regression_scores(f_test_mean, f_test_stds**2 + noise_var, test_labels)
+
+        # Compute test errors using full GP (make sure to set the sample size sufficiently high)
+        # should work for all datasets except for protein
+        f_test_mean_ref += train_label_mean
+        test_error_ref, test_mnll_ref = regression_scores(f_test_mean_ref, f_test_stds_ref**2 + noise_var, test_labels[test_idxs])
     else:
         test_predictions = het_gp.predictive_sample(
             train_features, test_features, train_labels, train_label_vars,
@@ -357,6 +365,12 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
 
         test_predictions += train_label_mean
         test_error, test_mnll = classification_scores(test_predictions, test_labels)
+
+        # Compute test errors using full GP (make sure to set the sample size sufficiently high)
+        # should work for all datasets except for protein
+        # f_test_mean_ref += train_label_mean
+        # test_error_ref, test_error_ref = classification_scores(f_test_mean_ref, test_labels[test_idxs])
+        test_error_ref, test_mnll_ref = 0, 0
 
     test_label_var = test_labels.var(unbiased=False).item()
 
@@ -381,6 +395,8 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
         'kernel_len': feature_encoder.log_lengthscale.exp().item(),
         'test_error': test_error,
         'test_mnll': test_mnll,
+        'test_error_ref': test_error_ref,
+        'test_mnll_ref': test_mnll_ref,
         'test_label_var': test_label_var,
         'k_frob_error': frob_error.item(),
         'k_rel_frob_error': rel_frob_error.item(),
@@ -435,8 +451,8 @@ if __name__ == '__main__':
         pow_2_shape = int(2**np.ceil(np.log2(train_data.shape[1])))
         n_samples = train_data.shape[0] + test_data.shape[0]
 
-        log_handler = util.data.Log_Handler(rf_parameters['save_name'], '{}_d{}_n{}'.format(data_name, pow_2_shape, n_samples))
-        csv_handler = util.data.DF_Handler(rf_parameters['save_name'], '{}_d{}_n{}'.format(data_name, pow_2_shape, n_samples))
+        log_handler = util.data.Log_Handler(rf_parameters['save_name'], '{}_d{}_n{}_centering_{}'.format(data_name, pow_2_shape, n_samples, args.zero_mean))
+        csv_handler = util.data.DF_Handler(rf_parameters['save_name'], '{}_d{}_n{}_centering_{}'.format(data_name, pow_2_shape, n_samples, args.zero_mean))
         baseline_config = rf_parameters['baseline_config']
 
         if rf_parameters['kernel'] == 'polynomial':
