@@ -451,8 +451,8 @@ if __name__ == '__main__':
         pow_2_shape = int(2**np.ceil(np.log2(train_data.shape[1])))
         n_samples = train_data.shape[0] + test_data.shape[0]
 
-        log_handler = util.data.Log_Handler(rf_parameters['save_name'], '{}_d{}_n{}_centering_{}'.format(data_name, pow_2_shape, n_samples, args.zero_mean))
-        csv_handler = util.data.DF_Handler(rf_parameters['save_name'], '{}_d{}_n{}_centering_{}'.format(data_name, pow_2_shape, n_samples, args.zero_mean))
+        log_handler = util.data.Log_Handler(rf_parameters['save_name'], '{}_d{}_n{}_centering_{}'.format(data_name, pow_2_shape, n_samples, args.zero_center))
+        csv_handler = util.data.DF_Handler(rf_parameters['save_name'], '{}_d{}_n{}_centering_{}'.format(data_name, pow_2_shape, n_samples, args.zero_center))
         baseline_config = rf_parameters['baseline_config']
 
         if rf_parameters['kernel'] == 'polynomial':
