@@ -24,7 +24,7 @@ Runs Gaussian Process Classification experiments as closed form GP regression on
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rf_parameter_file', type=str, required=False, default='config/rf_parameters/poly3_copy.json',
+    parser.add_argument('--rf_parameter_file', type=str, required=False, default='config/rf_parameters/poly3_a2.json',
                         help='Path to RF parameter file')
     parser.add_argument('--datasets_file', type=str, required=False, default='config/active_datasets2.json',
                         help='List of datasets to be used for the experiments')
