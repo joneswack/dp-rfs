@@ -24,9 +24,9 @@ Runs Gaussian Process Classification experiments as closed form GP regression on
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rf_parameter_file', type=str, required=False, default='config/rf_parameters/poly10_a2_debug.json',
+    parser.add_argument('--rf_parameter_file', type=str, required=False, default='config/rf_parameters/poly3_a2.json',
                         help='Path to RF parameter file')
-    parser.add_argument('--datasets_file', type=str, required=False, default='config/active_datasets2.json',
+    parser.add_argument('--datasets_file', type=str, required=False, default='config/datasets_regression.json',
                         help='List of datasets to be used for the experiments')
     parser.add_argument('--num_data_samples', type=int, required=False, default=5000,
                         help='Number of data samples for lengthscale estimation')
@@ -368,9 +368,11 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
 
         # Compute test errors using full GP (make sure to set the sample size sufficiently high)
         # should work for all datasets except for protein
-        # f_test_mean_ref += train_label_mean
+        f_test_mean_ref += train_label_mean
         # test_error_ref, test_error_ref = classification_scores(f_test_mean_ref, test_labels[test_idxs])
-        test_error_ref, test_mnll_ref = 0, 0
+        test_acc_ref = (f_test_mean_ref.argmax(dim=1) == test_labels[test_idxs].argmax(dim=1)).float().mean().item()
+        test_error_ref = 1.0 - test_acc_ref
+        test_mnll_ref = 0
 
     test_label_var = test_labels.var(unbiased=False).item()
 

@@ -12,7 +12,7 @@
     },
     "noise_var_range": {
         "regression": {
-            "min": -10,
+            "min": -6,
             "max": 14,
             "base": 2
         },
