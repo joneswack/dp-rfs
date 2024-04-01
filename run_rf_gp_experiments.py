@@ -171,8 +171,8 @@ def run_rf_gp(data_dict, down_features, up_features, config, args, rf_params, se
     test_labels = data_dict['test_labels']
     noise_var = data_dict['noise_var']
     ref_kernel = data_dict['ref_kernel']
-    f_test_mean_ref = data_dict['f_test_mean_ref']
-    f_test_stds_ref = data_dict['f_test_stds_ref']
+    f_test_mean_ref = data_dict['f_test_mean_ref'].clone()
+    f_test_stds_ref = data_dict['f_test_stds_ref'].clone()
     regression = data_dict['regression']
 
     for optional_key in ['complex_real', 'ahle', 'tree', 'craft', 'full_cov']:
@@ -495,28 +495,28 @@ if __name__ == '__main__':
         for noise_var in noise_vars:
             # config, data_name, current_train, current_test, train_labels, test_labels, num_samples, noise_var, regression=False
             with torch.no_grad():
-                # try:
-                data_dict = prepare_data(baseline_config, args, rf_parameters,
-                    data_name, sub_data, val_data, sub_labels, val_labels,
-                    noise_var, regression=regression
-                )
+                try:
+                    data_dict = prepare_data(baseline_config, args, rf_parameters,
+                        data_name, sub_data, val_data, sub_labels, val_labels,
+                        noise_var, regression=regression
+                    )
 
-                log_dir = run_rf_gp(data_dict, d_features, d_features, baseline_config, args, rf_parameters, 0)
-                # except Exception as e:
-                #     print(e)
-                #     print('Skipping current configuration...')
-                #     continue
+                    log_dir = run_rf_gp(data_dict, d_features, d_features, baseline_config, args, rf_parameters, 0)
+                except Exception as e:
+                    print(e)
+                    print('Skipping current configuration...')
+                    continue
 
             noise_var_csv_handler.append(log_dir)
             log_handler.append(log_dir)
             noise_var_csv_handler.save()
 
         noise_var_df = pd.read_csv(noise_var_csv_handler.file_path)
-        noise_var_opt = noise_var_df.sort_values('test_mnll', axis=0, ascending=True)['noise_var'].values[0]
+        noise_var_opt = noise_var_df.sort_values('test_mnll_ref', axis=0, ascending=True)['noise_var'].values[0]
 
         print('Optimal noise var: {}'.format(noise_var_opt))
 
-        # noise_var_opt = 10**(-3)
+        # noise_var_opt = 64.0 # 10**(-3)
 
         del sub_data, val_data
         
