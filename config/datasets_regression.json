@@ -1,0 +1,14 @@
+{
+    "regression": [
+        "config/datasets/concrete.json",
+        "config/datasets/boston.json",
+        "config/datasets/energy.json",
+        "config/datasets/kin8nm.json",
+        "config/datasets/naval.json",
+        "config/datasets/powerplant.json",
+        "config/datasets/protein.json",
+        "config/datasets/yacht.json"
+    ],
+    "classification": [
+    ]
+}
