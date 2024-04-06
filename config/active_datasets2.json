@@ -2,6 +2,12 @@
     "regression": [
     ],
     "classification": [
-        "config/datasets/fashion_mnist.json"
+        "config/datasets/mnist.json",
+        "config/datasets/cod_rna.json",
+        "config/datasets/covertype.json",
+        "config/datasets/drive.json",
+        "config/datasets/magic.json",
+        "config/datasets/miniboo.json",
+        "config/datasets/mocap.json"
     ]
 }
