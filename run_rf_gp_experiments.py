@@ -24,9 +24,9 @@ Runs Gaussian Process Classification experiments as closed form GP regression on
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rf_parameter_file', type=str, required=False, default='config/rf_parameters/poly10_a2.json',
+    parser.add_argument('--rf_parameter_file', type=str, required=False, default='config/rf_parameters/poly7_a2.json',
                         help='Path to RF parameter file')
-    parser.add_argument('--datasets_file', type=str, required=False, default='config/datasets_regression.json',
+    parser.add_argument('--datasets_file', type=str, required=False, default='config/active_datasets3.json',
                         help='List of datasets to be used for the experiments')
     parser.add_argument('--num_data_samples', type=int, required=False, default=5000,
                         help='Number of data samples for lengthscale estimation')
@@ -35,7 +35,7 @@ def parse_args():
     parser.add_argument('--num_seeds', type=int, required=False, default=20,
                         help='Number of seeds (runs)')
     parser.add_argument('--zero_center', dest='zero_center', action='store_true')
-    parser.set_defaults(zero_center=False)
+    parser.set_defaults(zero_center=True)
     parser.add_argument('--use_gpu', dest='use_gpu', action='store_true')
     parser.set_defaults(use_gpu=False)
 

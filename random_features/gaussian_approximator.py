@@ -21,7 +21,7 @@ class GaussianApproximator(nn.Module):
 
     def __init__(self, d_in, d_features, approx_degree=4, lengthscale='auto', var=1.0,
                     ard=False, trainable_kernel=False, method='poly_sketch', device='cpu',
-                    projection_type='srht', hierarchical=False, complex_weights=False, complex_real=False):
+                    projection_type='srht', ahle=False, complex_weights=False, complex_real=False):
         """
         d_in: Data input dimension
         d_features: Projection dimension
@@ -33,7 +33,7 @@ class GaussianApproximator(nn.Module):
         method: Approximation technique (maclaurin/maclaurin_p/poly_sketch/rff)
             maclaurin is the optimized maclaurin method while maclarin_p the approach by Kar & Karnick 2012
         projection_type: rademacher/gaussian/srht/countsketch_sparse/countsketch_dense/countsketch_scatter
-        hierarchical: Whether to use hierarchical sketches (overcomes exponential variances w.r.t. p but is not always better)
+        ahle: Whether to use hierarchical sketches (overcomes exponential variances w.r.t. p but is not always better)
         complex_weights: Whether to use complex-valued weights (almost always lower variances but more expensive)
         """
 
@@ -60,7 +60,7 @@ class GaussianApproximator(nn.Module):
 
         self.method = method
         self.projection_type = projection_type
-        self.hierarchical = hierarchical
+        self.ahle = ahle
         self.complex_weights = complex_weights
         self.complex_real = complex_real
 
@@ -74,7 +74,7 @@ class GaussianApproximator(nn.Module):
             self.feature_encoder = Maclaurin(d_in, d_features, coef_fun=kernel_coefs, measure=measure,
                                 module_args={
                                     'projection': projection_type,
-                                    'hierarchical': hierarchical,
+                                    'ahle': ahle,
                                     'complex_weights': complex_weights,
                                     'complex_real': complex_real
                                 },
@@ -90,7 +90,7 @@ class GaussianApproximator(nn.Module):
             self.feature_encoder = Maclaurin(d_in, d_features, coef_fun=kernel_coefs, measure=measure,
                                 module_args={
                                     'projection': projection_type,
-                                    'hierarchical': hierarchical,
+                                    'ahle': ahle,
                                     'complex_weights': complex_weights,
                                     'complex_real': complex_real
                                 },
@@ -104,7 +104,7 @@ class GaussianApproximator(nn.Module):
             self.feature_encoder = Maclaurin(d_in, d_features, coef_fun=kernel_coefs, measure=measure,
                                 module_args={
                                     'projection': projection_type,
-                                    'hierarchical': hierarchical,
+                                    'ahle': ahle,
                                     'complex_weights': complex_weights,
                                     'complex_real': complex_real
                                 },
