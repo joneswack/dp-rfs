@@ -35,7 +35,7 @@ def parse_args():
     parser.add_argument('--num_seeds', type=int, required=False, default=20,
                         help='Number of seeds (runs)')
     parser.add_argument('--zero_center', dest='zero_center', action='store_true')
-    parser.set_defaults(zero_center=True)
+    parser.set_defaults(zero_center=False)
     parser.add_argument('--use_gpu', dest='use_gpu', action='store_true')
     parser.set_defaults(use_gpu=False)
 
